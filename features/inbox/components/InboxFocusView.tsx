@@ -19,7 +19,7 @@ import {
   Maximize2
 } from 'lucide-react';
 import { FocusItem, AISuggestion } from '../hooks/useInboxController';
-import { Activity } from '@/types';
+import { Activity, DealView } from '@/types';
 import { FocusContextPanel } from './FocusContextPanel';
 import { useCRM } from '@/context/CRMContext';
 import { useMoveDealSimple } from '@/lib/query/hooks';
@@ -66,6 +66,19 @@ export const InboxFocusView: React.FC<InboxFocusViewProps> = ({
 
   // Performance: build lookup maps once to avoid repeated `.find(...)` in `contextData`.
   const dealsById = useMemo(() => new Map(deals.map(d => [d.id, d])), [deals]);
+  // UX: alguns itens (ex.: atividades) podem vir sem `dealId` mas com `dealTitle`.
+  // Criamos um lookup por título para conseguir abrir o painel “Ver detalhes”.
+  const dealsByTitleKey = useMemo(() => {
+    const map = new Map<string, DealView[]>();
+    for (const d of deals) {
+      const key = (d.title ?? '').trim().toLowerCase();
+      if (!key) continue;
+      const list = map.get(key);
+      if (list) list.push(d);
+      else map.set(key, [d]);
+    }
+    return map;
+  }, [deals]);
   const contactsById = useMemo(() => new Map(contacts.map(c => [c.id, c])), [contacts]);
   const boardsById = useMemo(() => new Map(boards.map(b => [b.id, b])), [boards]);
 
@@ -99,6 +112,15 @@ export const InboxFocusView: React.FC<InboxFocusViewProps> = ({
     if (currentItem.type === 'activity') {
       const act = currentItem.data as Activity;
       dealId = act.dealId || '';
+      // Fallback: muitas telas exibem apenas `dealTitle` mesmo quando `dealId` está vazio.
+      // Tentamos resolver o deal por título para permitir abrir o painel de contexto.
+      if (!dealId && act.dealTitle) {
+        const key = act.dealTitle.trim().toLowerCase();
+        const matches = dealsByTitleKey.get(key);
+        if (matches && matches.length > 0) {
+          dealId = matches[0].id;
+        }
+      }
 
       // Tenta extrair nome do contato da descrição (ex: "O cliente Amanda Ribeiro não compra...")
       const descMatch = act.description?.match(/cliente\s+([A-ZÀ-Ú][a-zà-ú]+(?:\s+[A-ZÀ-Ú][a-zà-ú]+)*)/i);
@@ -156,7 +178,7 @@ export const InboxFocusView: React.FC<InboxFocusViewProps> = ({
       board,
       isPlaceholder: !deal && !!placeholderDeal
     };
-  }, [currentItem, dealsById, contactsById, contacts, activitiesByDealIdSorted, boardsById, activeBoard]);
+  }, [currentItem, dealsById, dealsByTitleKey, contactsById, contacts, activitiesByDealIdSorted, boardsById, activeBoard]);
 
   const { moveDeal } = useMoveDealSimple(contextData?.board ?? null, []);
 
