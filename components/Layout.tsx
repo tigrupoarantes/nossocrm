@@ -24,7 +24,7 @@
  * ```
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
@@ -136,7 +136,13 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const { profile, signOut } = useAuth();
   const pathname = usePathname();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
-  const [debugEnabled, setDebugEnabled] = useState(isDebugMode);
+  // Hydration safety: `isDebugMode()` reads localStorage. On SSR it is always false.
+  // Initialize deterministically and sync on mount to avoid hydration mismatch warnings.
+  const [debugEnabled, setDebugEnabled] = useState(false);
+
+  useEffect(() => {
+    setDebugEnabled(isDebugMode());
+  }, []);
 
   // Track the last clicked menu item to maintain highlight during Suspense transitions
   const [clickedPath, setClickedPath] = useState<string | undefined>(undefined);
