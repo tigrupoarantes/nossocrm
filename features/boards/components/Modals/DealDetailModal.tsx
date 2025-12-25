@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect, useId, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
 import { useCRM } from '@/context/CRMContext';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
@@ -49,7 +48,6 @@ interface DealDetailModalProps {
 const PT_BR_DATE_FORMATTER = new Intl.DateTimeFormat('pt-BR');
 
 export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen, onClose }) => {
-  const router = useRouter();
   // Accessibility: Unique ID for ARIA labelling
   const headingId = useId();
 
@@ -406,14 +404,6 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                 )}
               </div>
               <div className="flex gap-3 items-center">
-                <button
-                  type="button"
-                  onClick={() => router.push(`/deals/${deal.id}/cockpit`)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg font-bold text-sm flex items-center gap-2 transition-all"
-                  title="Abrir Cockpit (página completa)"
-                >
-                  <Bot size={16} /> Cockpit
-                </button>
                 {/* Se fechado: mostra badge + botão Reabrir */}
                 {(deal.isWon || deal.isLost) ? (
                   <>
