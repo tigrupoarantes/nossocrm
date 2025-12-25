@@ -15,6 +15,8 @@
   - Playbook: adicionado **Infoprodutor (Completo)** como jornada oficial e uma opção de instalação **“Incluir Renovações (Assinatura)”** antes de instalar (board opcional).
   - Playbook: ajustado **Funil de Vendas Simples** para labels mais diretas: **Novo → Em conversa → Proposta → Ganho → Perdido**.
   - Playbook (Infoprodutor): defaults de **Won/Lost** agora são aplicados automaticamente na instalação (ex.: “Matriculado” em Vendas, “Primeiro Resultado” no Onboarding, “Upsell Fechado” em Expansão, “Renovado” em Renovações; CS Health usa “Arquivar” e “Churn”).
+  - UX (Boards): no modal **Editar Board**, agora é possível **trocar o board sendo editado** por um seletor, evitando o fluxo “fechar → engrenagem → abrir outro board”.
+  - Playbook (Infoprodutor): board opcional **Renovações (Assinatura)** agora é criado como **“6. Renovações (Assinatura)”** para manter a lista numerada.
 
 ## 24/12/2025
 

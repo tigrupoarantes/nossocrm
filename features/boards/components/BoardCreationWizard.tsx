@@ -134,7 +134,9 @@ export const BoardCreationWizard: React.FC<BoardCreationWizardProps> = ({
   const buildRenewalsBoard = () => {
     return {
       slug: 'renewals',
-      name: 'Renovações (Assinatura)',
+      // UX: keep the journey list visually consistent (all boards are numbered).
+      // This board is inserted after "5. Upsell (Expansão)" when the optional flag is enabled.
+      name: '6. Renovações (Assinatura)',
       columns: [
         { name: '180+ dias', color: 'bg-blue-500', linkedLifecycleStage: 'CUSTOMER' },
         { name: '120 dias', color: 'bg-purple-500', linkedLifecycleStage: 'CUSTOMER' },
