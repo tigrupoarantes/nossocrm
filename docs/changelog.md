@@ -24,6 +24,7 @@
   - UX (Boards): tela inicial do Wizard foi **compactada** (formato “chooser”) e agora dá **destaque ao Criar com IA** como CTA primário.
   - UX (Modais): criado um conjunto de **tokens de modal** (`components/ui/modalStyles.ts`) e o `components/ui/Modal.tsx` passou a usá-los; modais de Boards foram alinhados para manter consistência (overlay, padding, radius, viewport cap e foco).
   - UX (Boards): Wizard “Criar Novo Board” agora mantém o **modo browse compacto** (mesma filosofia da home) e removeu o **footer vazio** no step de seleção para evitar “espaço morto” e sensação de modal gigante.
+  - UX (Boards): corrigido conflito de `max-w` no Wizard (o `lg:max-w-5xl` estava vencendo e mantendo o modal largo mesmo no browse); agora o `max-w` é calculado sem classes conflitantes.
 
 ## 24/12/2025
 

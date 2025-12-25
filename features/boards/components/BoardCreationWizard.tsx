@@ -675,6 +675,14 @@ export const BoardCreationWizard: React.FC<BoardCreationWizardProps> = ({
 
   const isSelectHome = step === 'select' && selectMode === 'home' && !isChatMode;
   const isSelectBrowse = step === 'select' && selectMode === 'browse' && !isChatMode;
+  // Avoid conflicting max-width classes (Tailwind order can make `lg:max-w-5xl` win).
+  const panelMaxWidthClass = isChatMode
+    ? 'lg:max-w-6xl'
+    : isSelectHome
+      ? 'sm:max-w-xl lg:max-w-xl'
+      : isSelectBrowse
+        ? 'sm:max-w-4xl lg:max-w-4xl'
+        : 'lg:max-w-5xl';
 
   if (!isOpen) return null;
 
@@ -691,7 +699,7 @@ export const BoardCreationWizard: React.FC<BoardCreationWizardProps> = ({
       <div
         // NOTE: we hard-cap width/height by viewport to avoid overflow on small screens.
         // `dvh` handles mobile browser chrome better than `vh`.
-        className={`relative z-10 w-full h-full sm:h-auto ${isChatMode ? 'lg:max-w-6xl' : 'lg:max-w-5xl'} ${isSelectHome ? 'sm:max-w-xl lg:max-w-xl' : ''} ${isSelectBrowse ? 'sm:max-w-4xl lg:max-w-4xl' : ''} bg-white dark:bg-dark-card rounded-xl sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] transition-all duration-300`}
+        className={`relative z-10 w-full h-full sm:h-auto ${panelMaxWidthClass} bg-white dark:bg-dark-card rounded-xl sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] transition-all duration-300`}
       >
         {/* Header */}
         <div className="flex items-center justify-between p-3 sm:p-4 border-b border-slate-200 dark:border-white/10 shrink-0">
