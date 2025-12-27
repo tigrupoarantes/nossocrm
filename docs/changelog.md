@@ -36,6 +36,8 @@
     - O step `supabase_edge_functions` agora **auto-skip** quando não existem functions no repo (não exige PAT só por isso).
   - UX (Supabase):
     - Ao colar o **PAT**, o Wizard agora **lista projetos automaticamente** (com debounce) e, se não encontrar nenhum, sugere **criar um projeto automaticamente** (já seguindo com auto-preenchimento).
+    - Refatorado para **Jobs-style / progressive disclosure**: primeiro pede só o **PAT**, depois o usuário escolhe/cria o projeto, e só então aparecem toggles/detalhes (campos avançados ficam escondidos).
+    - Copy: esclarecido que o token necessário é o **Access Token (PAT)** (prefixo `sbp_`) e **não** o token da “Experimental API”.
 
 - **Build (fix)**:
   - Corrigidos erros de typecheck no build (`next build`):
