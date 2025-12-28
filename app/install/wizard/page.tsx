@@ -76,9 +76,12 @@ function humanizeError(message: string) {
   return message;
 }
 
-function buildDbUrl(projectRef: string, dbPassword: string) {
-  const host = `db.${projectRef}.supabase.co`;
-  return `postgresql://postgres:${encodeURIComponent(dbPassword)}@${host}:6543/postgres?sslmode=require&pgbouncer=true`;
+function buildDbUrl(projectRef: string, dbPassword: string, region?: string) {
+  // Usa o pooler regional do Supabase que é mais confiável que db.xxx.supabase.co
+  // O user precisa incluir o projectRef: postgres.projectRef
+  const regionSlug = region || 'us-east-1';
+  const poolerHost = `aws-0-${regionSlug}.pooler.supabase.com`;
+  return `postgresql://postgres.${projectRef}:${encodeURIComponent(dbPassword)}@${poolerHost}:6543/postgres?sslmode=require`;
 }
 
 function inferProjectRef(url: string): string | null {
@@ -467,7 +470,7 @@ export default function InstallWizardPage() {
       if (ref) {
         setSupabaseProjectRef(ref);
         setSupabaseUrl(url || `https://${ref}.supabase.co`);
-        setSupabaseDbUrl(buildDbUrl(ref, supabaseCreateDbPass));
+        setSupabaseDbUrl(buildDbUrl(ref, supabaseCreateDbPass, 'us-east-1'));
         
         setSupabaseProvisioning(true);
         setSupabaseProvisioningStatus('COMING_UP');
