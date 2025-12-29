@@ -151,6 +151,7 @@ export default function InstallWizardPage() {
   const [supabaseProvisioning, setSupabaseProvisioning] = useState(false);
   const [supabaseProvisioningStatus, setSupabaseProvisioningStatus] = useState<string | null>(null);
   const [supabaseResolving, setSupabaseResolving] = useState(false);
+  const [pausePolling, setPausePolling] = useState(false);
   const [supabaseResolveError, setSupabaseResolveError] = useState<string | null>(null);
   const [supabaseResolvedOk, setSupabaseResolvedOk] = useState(false);
   const [supabasePausingRef, setSupabasePausingRef] = useState<string | null>(null);
@@ -570,6 +571,41 @@ export default function InstallWizardPage() {
     } finally {
       setSupabaseCreating(false);
     }
+  };
+  
+  const pollProjectStatus = async (projectRef: string): Promise<string> => {
+    const maxAttempts = 15; // 30s total (2s * 15)
+    let attempts = 0;
+    
+    while (attempts < maxAttempts) {
+      try {
+        const res = await fetch('/api/installer/supabase/project-status', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ 
+            installerToken: installerToken.trim() || undefined, 
+            accessToken: supabaseAccessToken.trim(), 
+            projectRef 
+          }),
+        });
+        
+        if (res.ok) {
+          const data = await res.json();
+          console.log(`[pollProjectStatus] Attempt ${attempts + 1}: status = ${data.status}`);
+          
+          if (data.status === 'INACTIVE') {
+            return 'INACTIVE';
+          }
+        }
+      } catch (err) {
+        console.error('[pollProjectStatus] Error:', err);
+      }
+      
+      attempts++;
+      await new Promise(resolve => setTimeout(resolve, 2000)); // Aguarda 2s
+    }
+    
+    throw new Error('Timeout aguardando projeto pausar (30s)');
   };
   
   const pauseProject = async (projectRef: string) => {
