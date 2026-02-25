@@ -10,9 +10,11 @@ export async function createClient() {
     const cookieStore = await cookies()
 
     // Prefer new key formats, fallback to legacy
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!.trim()
+    const supabaseAnonKey = (
+        process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
         || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    ).trim()
 
     return createServerClient(
         supabaseUrl,
@@ -46,9 +48,11 @@ export async function createAdminClient() {
     const cookieStore = await cookies()
 
     // Prefer new key formats, fallback to legacy
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-    const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!.trim()
+    const supabaseSecretKey = (
+        process.env.SUPABASE_SECRET_KEY
         || process.env.SUPABASE_SERVICE_ROLE_KEY!
+    ).trim()
 
     return createServerClient(
         supabaseUrl,
@@ -82,9 +86,11 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js';
  */
 export function createStaticAdminClient() {
     // Prefer new key formats, fallback to legacy
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-    const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!.trim()
+    const supabaseSecretKey = (
+        process.env.SUPABASE_SECRET_KEY
         || process.env.SUPABASE_SERVICE_ROLE_KEY!
+    ).trim()
 
     return createSupabaseClient(supabaseUrl, supabaseSecretKey);
 }
