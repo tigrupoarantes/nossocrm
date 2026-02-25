@@ -101,6 +101,7 @@ describe('SettingsPage RBAC', () => {
     expect(screen.getByText(/página inicial/i)).toBeInTheDocument()
     // Tabs pessoais seguem visíveis
     expect(screen.getByRole('button', { name: /central de i\.a/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^unidades$/i })).not.toBeInTheDocument()
   })
 
   it('admin vê seções de configuração do sistema', async () => {
@@ -117,7 +118,9 @@ describe('SettingsPage RBAC', () => {
       screen.getByRole('heading', { name: /^Campos Personalizados$/i })
     ).toBeInTheDocument()
     // Admin também vê as abas extras
+    const businessUnitsTab = screen.getByRole('button', { name: /^unidades$/i })
     const integrationsTab = screen.getByRole('button', { name: /integrações/i })
+    expect(businessUnitsTab).toBeInTheDocument()
     expect(integrationsTab).toBeInTheDocument()
     fireEvent.click(integrationsTab)
 

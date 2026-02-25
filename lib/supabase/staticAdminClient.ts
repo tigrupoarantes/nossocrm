@@ -8,9 +8,11 @@ import { createClient } from '@supabase/supabase-js';
  */
 export function createStaticAdminClient() {
   // Prefer new key formats, fallback to legacy
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!.trim()
+  const supabaseSecretKey = (
+    process.env.SUPABASE_SECRET_KEY
     || process.env.SUPABASE_SERVICE_ROLE_KEY!
+  ).trim()
 
   return createClient(supabaseUrl, supabaseSecretKey);
 }
