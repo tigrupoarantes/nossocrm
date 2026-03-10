@@ -332,7 +332,7 @@ export interface Board {
   defaultProductId?: string;
   stages: BoardStage[];
   isDefault?: boolean;
-  template?: 'PRE_SALES' | 'SALES' | 'ONBOARDING' | 'CS' | 'CUSTOM'; // Template usado para criar este board
+  template?: 'PRE_SALES' | 'SALES' | 'ONBOARDING' | 'CS' | 'CUSTOM' | 'QUALIFICATION' | 'SALES_CONNECTED'; // Template usado para criar este board
   automationSuggestions?: string[]; // Sugestões de automação da IA
 
   // AI Strategy Fields
@@ -488,3 +488,76 @@ export interface ContactsServerFilters {
 
 /** Colunas ordenáveis na tabela de contatos. */
 export type ContactSortableColumn = 'name' | 'created_at' | 'updated_at' | 'stage';
+
+// =============================================================================
+// AUTOMATION ENGINE TYPES
+// Motor de automação — regras, agendamentos e histórico de execuções
+// =============================================================================
+
+export type AutomationTriggerType =
+  | 'deal_created'
+  | 'stage_entered'
+  | 'days_in_stage'
+  | 'response_received';
+
+export type AutomationActionType =
+  | 'send_email'
+  | 'send_whatsapp'
+  | 'move_stage'
+  | 'move_to_next_board'
+  | 'validate_cnpj'
+  | 'check_serasa'
+  | 'check_customer_base';
+
+export type AutomationScheduleStatus = 'pending' | 'executed' | 'cancelled' | 'failed';
+
+export interface AutomationRule {
+  id: string;
+  organizationId: string;
+  boardId: string | null;
+  name: string;
+  triggerType: AutomationTriggerType;
+  triggerConfig: {
+    stageId?: string;
+    days?: number;
+    channel?: string;
+  };
+  conditionConfig: Record<string, unknown>;
+  actionType: AutomationActionType;
+  actionConfig: {
+    templateId?: string;
+    stageId?: string;
+    toStageLabel?: string;
+    toBoardId?: string;
+    minimumScore?: number;
+    cancelPending?: boolean;
+  };
+  isActive: boolean;
+  position: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AutomationSchedule {
+  id: string;
+  organizationId: string;
+  ruleId: string;
+  dealId: string;
+  scheduledAt: string;
+  status: AutomationScheduleStatus;
+  executedAt: string | null;
+  error: string | null;
+  createdAt: string;
+}
+
+export interface AutomationExecution {
+  id: string;
+  organizationId: string;
+  scheduleId: string | null;
+  ruleId: string;
+  dealId: string;
+  actionType: AutomationActionType;
+  result: Record<string, unknown> | null;
+  success: boolean;
+  executedAt: string;
+}

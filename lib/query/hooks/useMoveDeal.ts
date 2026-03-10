@@ -17,6 +17,7 @@ import { dealsService } from '@/lib/supabase';
 import { boardsService } from '@/lib/supabase/boards'; // Added
 import { activitiesService } from '@/lib/supabase/activities';
 import { contactsService } from '@/lib/supabase/contacts';
+import { onStageEntered } from '@/lib/automation/triggers';
 import type { Deal, DealView, Board, Activity } from '@/types';
 
 interface MoveDealParams {
@@ -172,7 +173,17 @@ export const useMoveDeal = () => {
         } as Omit<Activity, 'id' | 'createdAt'>).catch(console.error);
       }
 
-      // 4. NextBoard Automation (async, don't block)
+      // 4. Automation Engine: trigger stage_entered (fire-and-forget)
+      if (deal.boardId) {
+        onStageEntered({
+          dealId,
+          boardId: deal.boardId,
+          stageId: targetStageId,
+          organizationId: (deal as any).organizationId ?? (deal as any).organization_id ?? '',
+        }).catch(console.error);
+      }
+
+      // 5. NextBoard Automation (async, don't block)
       const isSuccessStage =
         isWon ||
         targetStage?.linkedLifecycleStage === 'MQL' ||

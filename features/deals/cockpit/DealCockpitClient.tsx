@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   Activity as ActivityIcon,
   BadgeCheck,
+  Bot,
   CalendarClock,
   Check,
   Copy,
@@ -34,11 +35,12 @@ import { UIChat } from '@/components/ai/UIChat';
 import { CallModal, type CallLogData } from '@/features/inbox/components/CallModal';
 import { MessageComposerModal, type MessageChannel, type MessageExecutedEvent } from '@/features/inbox/components/MessageComposerModal';
 import { ScheduleModal, type ScheduleData, type ScheduleType } from '@/features/inbox/components/ScheduleModal';
+import { AutomationHistoryPanel } from '@/features/automation/components/AutomationHistoryPanel';
 
 import type { QuickScript, ScriptCategory } from '@/lib/supabase/quickScripts';
 import type { Activity, Board, BoardStage, Contact, DealView } from '@/types';
 
-type Tab = 'chat' | 'notas' | 'scripts' | 'arquivos';
+type Tab = 'chat' | 'notas' | 'scripts' | 'arquivos' | 'automacoes';
 
 // Performance: reuse Intl formatter instances (avoid creating them per call).
 const PT_BR_DATE_FORMATTER = new Intl.DateTimeFormat('pt-BR');
@@ -2270,6 +2272,9 @@ export default function DealCockpitClient({ dealId }: { dealId?: string }) {
                 <TabButton active={tab === 'arquivos'} onClick={() => setTab('arquivos')}>
                   Arquivos
                 </TabButton>
+                <TabButton active={tab === 'automacoes'} onClick={() => setTab('automacoes')}>
+                  Automações
+                </TabButton>
               </div>
 
               <div className="min-h-0 flex-1 overflow-hidden p-4">
@@ -2394,7 +2399,7 @@ export default function DealCockpitClient({ dealId }: { dealId?: string }) {
                       })}
                     </div>
                   </div>
-                ) : (
+                ) : tab === 'arquivos' ? (
                   <div className="h-full min-h-0 rounded-2xl border border-white/10 bg-white/2 p-4 overflow-auto">
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 text-xs font-semibold text-slate-300">
@@ -2453,6 +2458,13 @@ export default function DealCockpitClient({ dealId }: { dealId?: string }) {
                         ))
                       )}
                     </div>
+                  </div>
+                ) : (
+                  <div className="h-full min-h-0 rounded-2xl border border-white/10 bg-white/2 p-4 overflow-auto">
+                    <div className="flex items-center gap-2 text-xs font-semibold text-slate-300 mb-4">
+                      <Bot className="h-4 w-4" /> Histórico de Automações
+                    </div>
+                    <AutomationHistoryPanel dealId={deal.id} />
                   </div>
                 )}
               </div>

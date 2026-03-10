@@ -52,6 +52,7 @@
     "libphonenumber-js": "^1.12.33",
     "lucide-react": "^0.560.0",
     "next": "^16.0.10",
+    "nodemailer": "^8.0.2",
     "pg": "^8.16.3",
     "react": "19.2.1",
     "react-dom": "19.2.1",
@@ -61,6 +62,7 @@
     "remark-gfm": "^4.0.1",
     "server-only": "^0.0.1",
     "tailwind-merge": "^3.4.0",
+    "twilio": "^5.12.2",
     "zod": "^4.1.13",
     "zustand": "^5.0.9"
   },
@@ -70,6 +72,7 @@
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^14.6.1",
     "@types/node": "^20",
+    "@types/nodemailer": "^7.0.11",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^5.0.4",

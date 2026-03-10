@@ -920,3 +920,269 @@ export const boardStagesService = {
     }
   },
 };
+
+// =============================================================================
+// BOARD TEMPLATES
+// Cria boards pré-configurados com stages e automation_rules para o template
+// QUALIFICATION (Funil de Qualificação) e SALES_CONNECTED (Funil de Vendas).
+// =============================================================================
+
+interface QualificationBoardOptions {
+  organizationId: string;
+  name?: string;
+  /** ID do Funil de Vendas conectado (next_board_id). */
+  connectedSalesBoardId?: string;
+}
+
+interface SalesConnectedBoardOptions {
+  organizationId: string;
+  name?: string;
+}
+
+/**
+ * Cria o Funil de Qualificação com stages e automation_rules pré-configuradas.
+ *
+ * Stages criados:
+ *   LEAD → REVISÃO → DESQUALIFICADO → PRIMEIRO CONTATO EMAIL
+ *   → WHATSAPP → LIGAÇÃO → E-MAIL → GANHO
+ *
+ * Automações pré-configuradas:
+ *   D+0: validar CNPJ, consultar SERASA, verificar base FLAG/SAP
+ *   D+1: e-mail "Primeiro Contato"
+ *   D+3: WhatsApp (sem resposta)
+ *   D+5: mover para LIGAÇÃO (sem resposta)
+ *   D+6: mover para E-MAIL (sem atendimento)
+ *   D+7: WhatsApp lembrete
+ *   Qualquer momento: resposta → mover para Funil de Vendas (LEAD QUENTE)
+ */
+export async function createQualificationBoard(
+  options: QualificationBoardOptions
+): Promise<{ boardId: string | null; error: Error | null }> {
+  if (!supabase) return { boardId: null, error: new Error('Supabase not initialized') };
+
+  const orgId = options.organizationId;
+  const boardName = options.name ?? 'Funil de Qualificação';
+
+  try {
+    // 1. Criar o board
+    const { data: board, error: boardError } = await supabase
+      .from('boards')
+      .insert({
+        organization_id: orgId,
+        name: boardName,
+        template: 'QUALIFICATION',
+        linked_lifecycle_stage: 'LEAD',
+        next_board_id: options.connectedSalesBoardId ?? null,
+        description: 'Qualificação de leads com validação CNPJ, SERASA e cadência automatizada',
+      })
+      .select('id')
+      .single();
+
+    if (boardError || !board) return { boardId: null, error: boardError as Error };
+
+    const boardId = board.id;
+
+    // 2. Criar stages
+    const stages = [
+      { name: 'LEAD',                   label: 'Lead',                   color: 'bg-blue-500',   order: 0, is_default: true },
+      { name: 'REVISAO',                label: 'Revisão',                color: 'bg-yellow-500', order: 1 },
+      { name: 'DESQUALIFICADO',         label: 'Desqualificado',         color: 'bg-red-500',    order: 2 },
+      { name: 'PRIMEIRO_CONTATO_EMAIL', label: 'Primeiro Contato Email', color: 'bg-sky-500',    order: 3 },
+      { name: 'WHATSAPP',               label: 'WhatsApp',               color: 'bg-green-500',  order: 4 },
+      { name: 'LIGACAO',                label: 'Ligação',                color: 'bg-orange-500', order: 5 },
+      { name: 'EMAIL_FOLLOWUP',         label: 'E-mail Follow-up',       color: 'bg-purple-500', order: 6 },
+      { name: 'GANHO',                  label: 'Ganho',                  color: 'bg-emerald-500',order: 7 },
+    ];
+
+    const { data: createdStages, error: stagesError } = await supabase
+      .from('board_stages')
+      .insert(stages.map((s) => ({
+        organization_id: orgId,
+        board_id: boardId,
+        name: s.name,
+        label: s.label,
+        color: s.color,
+        order: s.order,
+        is_default: (s as any).is_default ?? false,
+      })))
+      .select('id, name');
+
+    if (stagesError || !createdStages) return { boardId, error: stagesError as Error };
+
+    // Mapear nome → id para usar nas automation_rules
+    const stageByName = Object.fromEntries(createdStages.map((s: any) => [s.name, s.id]));
+
+    // Atualizar won_stage_id no board
+    await supabase
+      .from('boards')
+      .update({ won_stage_id: stageByName['GANHO'] })
+      .eq('id', boardId);
+
+    // 3. Criar automation_rules
+    const rules = [
+      // D+0 — Validações imediatas
+      {
+        organization_id: orgId, board_id: boardId, position: 0, is_active: true,
+        name: 'D+0 Validar CNPJ',
+        trigger_type: 'deal_created', trigger_config: {},
+        condition_config: {},
+        action_type: 'validate_cnpj',
+        action_config: { toStageLabel: 'Revisão', to_stage_on_fail: stageByName['REVISAO'] },
+      },
+      {
+        organization_id: orgId, board_id: boardId, position: 1, is_active: true,
+        name: 'D+0 Consultar SERASA',
+        trigger_type: 'deal_created', trigger_config: {},
+        condition_config: {},
+        action_type: 'check_serasa',
+        action_config: { to_stage_on_fail: stageByName['DESQUALIFICADO'] },
+      },
+      {
+        organization_id: orgId, board_id: boardId, position: 2, is_active: true,
+        name: 'D+0 Verificar Base FLAG/SAP',
+        trigger_type: 'deal_created', trigger_config: {},
+        condition_config: {},
+        action_type: 'check_customer_base',
+        action_config: {},
+      },
+      // D+1 — Primeiro contato por e-mail
+      {
+        organization_id: orgId, board_id: boardId, position: 3, is_active: true,
+        name: 'D+1 E-mail Primeiro Contato',
+        trigger_type: 'stage_entered', trigger_config: { stage_id: stageByName['LEAD'], days: 1 },
+        condition_config: {},
+        action_type: 'send_email',
+        action_config: { templateId: 'primeiro-contato' },
+      },
+      // D+3 — WhatsApp (sem resposta)
+      {
+        organization_id: orgId, board_id: boardId, position: 4, is_active: true,
+        name: 'D+3 WhatsApp Sem Resposta',
+        trigger_type: 'days_in_stage', trigger_config: { stage_id: stageByName['LEAD'], days: 3 },
+        condition_config: {},
+        action_type: 'send_whatsapp',
+        action_config: { templateId: 'primeiro-contato' },
+      },
+      // D+5 — Mover para Ligação
+      {
+        organization_id: orgId, board_id: boardId, position: 5, is_active: true,
+        name: 'D+5 Mover para Ligação',
+        trigger_type: 'days_in_stage', trigger_config: { stage_id: stageByName['LEAD'], days: 5 },
+        condition_config: {},
+        action_type: 'move_stage',
+        action_config: { stageId: stageByName['LIGACAO'] },
+      },
+      // D+6 — Mover para E-mail (sem atendimento pelo comercial)
+      {
+        organization_id: orgId, board_id: boardId, position: 6, is_active: true,
+        name: 'D+6 Mover para E-mail Follow-up',
+        trigger_type: 'days_in_stage', trigger_config: { stage_id: stageByName['LIGACAO'], days: 1 },
+        condition_config: {},
+        action_type: 'move_stage',
+        action_config: { stageId: stageByName['EMAIL_FOLLOWUP'] },
+      },
+      // D+7 — WhatsApp lembrete
+      {
+        organization_id: orgId, board_id: boardId, position: 7, is_active: true,
+        name: 'D+7 WhatsApp Lembrete',
+        trigger_type: 'days_in_stage', trigger_config: { stage_id: stageByName['LIGACAO'], days: 2 },
+        condition_config: {},
+        action_type: 'send_whatsapp',
+        action_config: { templateId: 'lembrete' },
+      },
+      // Qualquer momento — Lead respondeu → mover para Funil de Vendas
+      {
+        organization_id: orgId, board_id: boardId, position: 8, is_active: true,
+        name: 'Resposta → Lead Quente (Funil de Vendas)',
+        trigger_type: 'response_received', trigger_config: {},
+        condition_config: {},
+        action_type: 'move_to_next_board',
+        action_config: {
+          toBoardId: options.connectedSalesBoardId ?? null,
+          toStageLabel: 'LEAD QUENTE',
+          cancelPending: true,
+        },
+      },
+    ];
+
+    const { error: rulesError } = await supabase.from('automation_rules').insert(rules);
+    if (rulesError) return { boardId, error: rulesError as Error };
+
+    return { boardId, error: null };
+  } catch (e) {
+    return { boardId: null, error: e as Error };
+  }
+}
+
+/**
+ * Cria o Funil de Vendas Professional com stages pré-configurados.
+ *
+ * Stages:
+ *   LEAD MORNO → LEAD QUENTE → LEAD GANHO → LEAD NUTRIÇÃO
+ */
+export async function createSalesConnectedBoard(
+  options: SalesConnectedBoardOptions
+): Promise<{ boardId: string | null; error: Error | null }> {
+  if (!supabase) return { boardId: null, error: new Error('Supabase not initialized') };
+
+  const orgId = options.organizationId;
+  const boardName = options.name ?? 'Funil de Vendas Professional';
+
+  try {
+    // 1. Criar o board
+    const { data: board, error: boardError } = await supabase
+      .from('boards')
+      .insert({
+        organization_id: orgId,
+        name: boardName,
+        template: 'SALES_CONNECTED',
+        linked_lifecycle_stage: 'CUSTOMER',
+        description: 'Funil de vendas conectado ao Funil de Qualificação',
+      })
+      .select('id')
+      .single();
+
+    if (boardError || !board) return { boardId: null, error: boardError as Error };
+
+    const boardId = board.id;
+
+    // 2. Criar stages
+    const stages = [
+      { name: 'LEAD_MORNO',    label: 'Lead Morno',    color: 'bg-sky-400',     order: 0, is_default: true },
+      { name: 'LEAD_QUENTE',   label: 'Lead Quente',   color: 'bg-orange-500',  order: 1 },
+      { name: 'LEAD_GANHO',    label: 'Lead Ganho',    color: 'bg-green-500',   order: 2 },
+      { name: 'LEAD_NUTRICAO', label: 'Lead Nutrição', color: 'bg-slate-500',   order: 3 },
+    ];
+
+    const { data: createdStages, error: stagesError } = await supabase
+      .from('board_stages')
+      .insert(stages.map((s) => ({
+        organization_id: orgId,
+        board_id: boardId,
+        name: s.name,
+        label: s.label,
+        color: s.color,
+        order: s.order,
+        is_default: (s as any).is_default ?? false,
+        linked_lifecycle_stage: s.name === 'LEAD_GANHO' ? 'CUSTOMER' : null,
+      })))
+      .select('id, name');
+
+    if (stagesError || !createdStages) return { boardId, error: stagesError as Error };
+
+    const stageByName = Object.fromEntries(createdStages.map((s: any) => [s.name, s.id]));
+
+    // Atualizar won_stage_id e lost_stage_id no board
+    await supabase
+      .from('boards')
+      .update({
+        won_stage_id: stageByName['LEAD_GANHO'],
+        lost_stage_id: stageByName['LEAD_NUTRICAO'],
+      })
+      .eq('id', boardId);
+
+    return { boardId, error: null };
+  } catch (e) {
+    return { boardId: null, error: e as Error };
+  }
+}

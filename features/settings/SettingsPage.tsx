@@ -12,10 +12,11 @@ import { AICenterSettings } from './AICenterSettings';
 import { BusinessUnitsSection } from './components/BusinessUnitsSection';
 
 import { UsersPage } from './UsersPage';
+import { CommunicationSection } from './components/CommunicationSection';
 import { useAuth } from '@/context/AuthContext';
-import { Settings as SettingsIcon, Users, Database, Sparkles, Plug, Package, Building2 } from 'lucide-react';
+import { Settings as SettingsIcon, Users, Database, Sparkles, Plug, Package, Building2, MessageSquare } from 'lucide-react';
 
-type SettingsTab = 'general' | 'products' | 'businessUnits' | 'integrations' | 'ai' | 'data' | 'users';
+type SettingsTab = 'general' | 'products' | 'businessUnits' | 'integrations' | 'ai' | 'data' | 'users' | 'communication';
 
 interface GeneralSettingsProps {
   hash?: string;
@@ -214,6 +215,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ tab: initialTab }) => {
     ...(profile?.role === 'admin' ? [{ id: 'products' as SettingsTab, name: 'Produtos/Serviços', icon: Package }] : []),
     ...(profile?.role === 'admin' ? [{ id: 'businessUnits' as SettingsTab, name: 'Unidades', icon: Building2 }] : []),
     ...(profile?.role === 'admin' ? [{ id: 'integrations' as SettingsTab, name: 'Integrações', icon: Plug }] : []),
+    ...(profile?.role === 'admin' ? [{ id: 'communication' as SettingsTab, name: 'Comunicação', icon: MessageSquare }] : []),
     { id: 'ai' as SettingsTab, name: 'Central de I.A', icon: Sparkles },
     { id: 'data' as SettingsTab, name: 'Dados', icon: Database },
     ...(profile?.role === 'admin' ? [{ id: 'users' as SettingsTab, name: 'Equipe', icon: Users }] : []),
@@ -227,6 +229,20 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ tab: initialTab }) => {
         return <BusinessUnitsSettings />;
       case 'integrations':
         return <IntegrationsSettings />;
+      case 'communication':
+        return (
+          <div className="pb-10">
+            <div className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-6">
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-1 flex items-center gap-2">
+                <MessageSquare className="h-5 w-5" /> Canais de Comunicação
+              </h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
+                Configure e-mail (SMTP), WhatsApp (Twilio), SERASA e base FLAG/SAP para as automações do Funil de Qualificação.
+              </p>
+              <CommunicationSection />
+            </div>
+          </div>
+        );
       case 'ai':
         return <AICenterSettings />;
       case 'data':

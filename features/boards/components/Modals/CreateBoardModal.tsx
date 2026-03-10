@@ -471,12 +471,30 @@ export const CreateBoardModal: React.FC<CreateBoardModalProps> = ({
                     className="w-full px-4 py-2.5 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   >
                     <option value="">Board em branco</option>
-                    <option value="PRE_SALES">🎯 Pré-venda (Lead → MQL)</option>
-                    <option value="SALES">💰 Pipeline de Vendas</option>
-                    <option value="ONBOARDING">🚀 Onboarding de Clientes</option>
-                    <option value="CS">❤️ CS & Upsell</option>
+                    <optgroup label="Templates padrão">
+                      <option value="PRE_SALES">🎯 Pré-venda (Lead → MQL)</option>
+                      <option value="SALES">💰 Pipeline de Vendas</option>
+                      <option value="ONBOARDING">🚀 Onboarding de Clientes</option>
+                      <option value="CS">❤️ CS & Upsell</option>
+                    </optgroup>
+                    <optgroup label="Templates com automação">
+                      <option value="QUALIFICATION">🔍 Funil de Qualificação (CNPJ + SERASA + Cadência)</option>
+                      <option value="SALES_CONNECTED">🚀 Funil de Vendas Professional (conectado)</option>
+                    </optgroup>
                   </select>
-                  {selectedTemplate && (
+                  {(selectedTemplate === 'QUALIFICATION' || selectedTemplate === 'SALES_CONNECTED') && (
+                    <div className="mt-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700">
+                      <p className="text-xs font-medium text-amber-800 dark:text-amber-300">
+                        ⚡ Template com automação
+                      </p>
+                      <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                        {selectedTemplate === 'QUALIFICATION'
+                          ? 'Inclui automações pré-configuradas: validação CNPJ (BrasilAPI), consulta SERASA, verificação base FLAG/SAP e cadência D+1 a D+7 por e-mail e WhatsApp.'
+                          : 'Recebe leads automaticamente do Funil de Qualificação. Conecte os dois funis após criar ambos usando "Ao Ganhar, enviar para...".'}
+                      </p>
+                    </div>
+                  )}
+                  {selectedTemplate && selectedTemplate !== 'QUALIFICATION' && selectedTemplate !== 'SALES_CONNECTED' && (
                     <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
                       ✨ Template aplicado! Você pode editar os campos abaixo.
                     </p>

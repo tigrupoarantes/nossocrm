@@ -6,6 +6,7 @@ import { decodeOffsetCursor, encodeOffsetCursor, parseLimit } from '@/lib/public
 import { resolveBoardIdFromKey, resolveFirstStageId } from '@/lib/public-api/resolve';
 import { normalizeEmail, normalizePhone, normalizeText } from '@/lib/public-api/sanitize';
 import { isValidUUID, sanitizeUUID } from '@/lib/supabase/utils';
+import { onDealCreated } from '@/lib/automation/triggers';
 
 export const runtime = 'nodejs';
 
@@ -214,6 +215,15 @@ export async function POST(request: Request) {
     .select('id,title,value,board_id,stage_id,contact_id,client_company_id,is_won,is_lost,loss_reason,closed_at,created_at,updated_at')
     .single();
   if (error) return NextResponse.json({ error: error.message, code: 'DB_ERROR' }, { status: 500 });
+
+  // Disparar automações de deal_created (fire-and-forget)
+  if (data?.id && boardId) {
+    onDealCreated({
+      dealId: data.id,
+      boardId,
+      organizationId: auth.organizationId,
+    }).catch(() => { /* erros de automação não bloqueiam a resposta */ });
+  }
 
   return NextResponse.json({ data, action: 'created' }, { status: 201 });
 }

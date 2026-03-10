@@ -1,6 +1,6 @@
 import { BoardStage, AgentPersona, BoardGoal } from '@/types';
 
-export type BoardTemplateType = 'PRE_SALES' | 'SALES' | 'ONBOARDING' | 'CS' | 'CUSTOM';
+export type BoardTemplateType = 'PRE_SALES' | 'SALES' | 'ONBOARDING' | 'CS' | 'CUSTOM' | 'QUALIFICATION' | 'SALES_CONNECTED';
 
 // Template vazio para boards customizados (não usa template)
 export const CUSTOM_TEMPLATE: BoardTemplate = {
@@ -147,4 +147,44 @@ export const BOARD_TEMPLATES: Record<BoardTemplateType, BoardTemplate> = {
   },
 
   CUSTOM: CUSTOM_TEMPLATE,
+
+  QUALIFICATION: {
+    name: 'Funil de Qualificação',
+    description: 'Qualificação automatizada com validação CNPJ, SERASA e cadência D+0 a D+7',
+    emoji: '🔍',
+    linkedLifecycleStage: 'LEAD',
+    tags: ['Automação', 'CNPJ', 'SERASA', 'Cadência'],
+    stages: [
+      { label: 'Lead',                  color: 'bg-blue-500',    linkedLifecycleStage: 'LEAD' },
+      { label: 'Revisão',               color: 'bg-yellow-500',  linkedLifecycleStage: 'LEAD' },
+      { label: 'Desqualificado',        color: 'bg-red-500',     linkedLifecycleStage: 'OTHER' },
+      { label: 'Primeiro Contato Email',color: 'bg-sky-500',     linkedLifecycleStage: 'LEAD' },
+      { label: 'WhatsApp',              color: 'bg-green-500',   linkedLifecycleStage: 'LEAD' },
+      { label: 'Ligação',               color: 'bg-orange-500',  linkedLifecycleStage: 'LEAD' },
+      { label: 'E-mail Follow-up',      color: 'bg-purple-500',  linkedLifecycleStage: 'LEAD' },
+      { label: 'Ganho',                 color: 'bg-emerald-500', linkedLifecycleStage: 'CUSTOMER' },
+    ],
+    defaultWonStageLabel: 'Ganho',
+    defaultLostStageLabel: 'Desqualificado',
+    entryTrigger: 'Novos leads B2B para qualificação — validação CNPJ e SERASA automáticas no D+0.',
+    automationNote: 'Inclui automações: validação CNPJ (BrasilAPI), consulta SERASA, verificação base FLAG/SAP e cadência D+1 a D+7 por e-mail e WhatsApp.',
+  } as any,
+
+  SALES_CONNECTED: {
+    name: 'Funil de Vendas Professional',
+    description: 'Funil de vendas conectado ao Funil de Qualificação via resposta do lead',
+    emoji: '🚀',
+    linkedLifecycleStage: 'CUSTOMER',
+    tags: ['Vendas', 'Lead Quente', 'Professional'],
+    stages: [
+      { label: 'Lead Morno',    color: 'bg-sky-400',     linkedLifecycleStage: 'LEAD' },
+      { label: 'Lead Quente',   color: 'bg-orange-500',  linkedLifecycleStage: 'MQL' },
+      { label: 'Lead Ganho',    color: 'bg-green-500',   linkedLifecycleStage: 'CUSTOMER' },
+      { label: 'Lead Nutrição', color: 'bg-slate-500',   linkedLifecycleStage: 'OTHER' },
+    ],
+    defaultWonStageLabel: 'Lead Ganho',
+    defaultLostStageLabel: 'Lead Nutrição',
+    entryTrigger: 'Leads qualificados no Funil de Qualificação que responderam a algum contato.',
+    automationNote: 'Recebe leads automaticamente do Funil de Qualificação quando o lead responde (Lead Quente) ou completa a cadência sem resposta (Lead Morno).',
+  } as any,
 };
