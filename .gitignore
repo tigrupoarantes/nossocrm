@@ -83,3 +83,6 @@ scripts/
 # Test documentation (test code stays, docs are local)
 test/*.md
 .env*.local
+
+# Claude Code local settings
+.claude/settings.local.json
