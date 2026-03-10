@@ -16,7 +16,7 @@ export { validateCNPJ } from './cnpj';
 export { checkCredit } from './serasa';
 export { checkActiveCustomer } from './customer-base';
 
-export interface D0ValidationResult {
+export interface D0ValidationResult extends Record<string, unknown> {
   cnpj: { valid: boolean; situacao?: string; error?: string };
   serasa: { approved: boolean; score: number | null; error?: string } | null;
   customerBase: { isActiveCustomer: boolean; error?: string } | null;
