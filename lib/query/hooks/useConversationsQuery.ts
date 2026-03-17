@@ -1,16 +1,16 @@
 /**
- * TanStack Query hooks for Conversations + Messages (WAHA WhatsApp)
+ * TanStack Query hooks for Conversations + Messages (Omnichannel)
  *
  * Features:
- * - Fetch conversations list ordered by last_message_at
+ * - Fetch conversations list ordered by last_message_at (todos os canais)
  * - Fetch messages for a specific conversation
- * - Send message mutation (via WAHA API route)
+ * - Send message via router unificado (/api/messages/send)
+ * - Fetch all conversations for a deal (/api/deals/[id]/conversations)
  * - Mark conversation as read
- * - Realtime subscription for new messages
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import type { Message } from '@/types';
+import type { ConversationChannel, Message } from '@/types';
 
 // =============================================================================
 // Query keys
@@ -21,11 +21,11 @@ export const conversationKeys = {
   lists: () => [...conversationKeys.all, 'list'] as const,
   detail: (id: string) => [...conversationKeys.all, 'detail', id] as const,
   messages: (conversationId: string) => ['messages', conversationId] as const,
+  forDeal: (dealId: string) => [...conversationKeys.all, 'deal', dealId] as const,
 };
 
 // =============================================================================
-// Types
-// Nota: o Supabase retorna colunas em snake_case (ex.: wa_chat_id, unread_count)
+// Types (snake_case — espelha resposta raw do Supabase)
 // =============================================================================
 
 export interface ConversationWithContact {
@@ -33,8 +33,11 @@ export interface ConversationWithContact {
   organization_id: string;
   contact_id: string | null;
   deal_id: string | null;
-  channel: 'whatsapp';
-  wa_chat_id: string;
+  channel: ConversationChannel;
+  wa_chat_id: string | null;
+  ig_conversation_id: string | null;
+  fb_conversation_id: string | null;
+  channel_metadata: Record<string, unknown>;
   last_message_at: string | null;
   unread_count: number;
   created_at: string;
@@ -43,9 +46,16 @@ export interface ConversationWithContact {
   deals?: { title: string } | null;
 }
 
+export interface ConversationWithMessages extends ConversationWithContact {
+  messages: Message[];
+}
+
 export interface SendMessageParams {
   conversationId: string;
   body: string;
+  channel?: ConversationChannel;
+  mediaUrl?: string;
+  replyToId?: string;
 }
 
 // =============================================================================
@@ -54,12 +64,16 @@ export interface SendMessageParams {
 
 /**
  * Fetch all conversations for the current org, ordered by last_message_at DESC.
+ * Suporta filtro opcional de canal via query param.
  */
-export function useConversations() {
+export function useConversations(channel?: ConversationChannel) {
   return useQuery<ConversationWithContact[]>({
-    queryKey: conversationKeys.lists(),
+    queryKey: channel ? [...conversationKeys.lists(), channel] : conversationKeys.lists(),
     queryFn: async () => {
-      const response = await fetch('/api/conversations');
+      const url = channel
+        ? `/api/conversations?channel=${channel}`
+        : '/api/conversations';
+      const response = await fetch(url);
       if (!response.ok) {
         throw new Error(`Failed to fetch conversations: ${response.status}`);
       }
@@ -91,14 +105,72 @@ export function useMessages(conversationId: string | null) {
 }
 
 /**
- * Mutation to send a WhatsApp message via WAHA.
- * On success, invalidates messages and conversations list.
+ * Fetch all conversations (com mensagens embutidas) de um deal específico.
+ * Usado pela aba "Conversas" no card do deal.
+ */
+export function useDealConversations(dealId: string | null) {
+  return useQuery<ConversationWithMessages[]>({
+    queryKey: conversationKeys.forDeal(dealId ?? ''),
+    queryFn: async () => {
+      if (!dealId) return [];
+      const response = await fetch(`/api/deals/${dealId}/conversations`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch deal conversations: ${response.status}`);
+      }
+      const data = await response.json() as { data: ConversationWithMessages[] };
+      return data.data ?? [];
+    },
+    enabled: !!dealId,
+    staleTime: 15_000,
+  });
+}
+
+/**
+ * Mutation para enviar mensagem via router omnichannel (/api/messages/send).
+ * Invalida mensagens e lista de conversas ao concluir.
+ */
+export function useSendMessage() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (params: SendMessageParams) => {
+      const response = await fetch('/api/messages/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conversationId: params.conversationId,
+          body: params.body,
+          channel: params.channel,
+          mediaUrl: params.mediaUrl,
+          replyToId: params.replyToId,
+        }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({})) as { error?: string };
+        throw new Error(err.error ?? `Send failed: ${response.status}`);
+      }
+
+      return response.json() as Promise<{ ok: boolean; message: Message }>;
+    },
+    onSuccess: (_, variables) => {
+      void queryClient.invalidateQueries({ queryKey: conversationKeys.messages(variables.conversationId) });
+      void queryClient.invalidateQueries({ queryKey: conversationKeys.lists() });
+      // Invalida também conversas do deal se houver deal vinculado
+      void queryClient.invalidateQueries({ queryKey: conversationKeys.all });
+    },
+  });
+}
+
+/**
+ * @deprecated Use useSendMessage() — suporta todos os canais via router omnichannel.
+ * Mantido para compatibilidade com InboxConversationsView existente.
  */
 export function useSendWahaMessage() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (params: SendMessageParams) => {
+    mutationFn: async (params: { conversationId: string; body: string }) => {
       const response = await fetch(`/api/conversations/${params.conversationId}/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -113,7 +185,6 @@ export function useSendWahaMessage() {
       return response.json() as Promise<{ ok: boolean; message: Message }>;
     },
     onSuccess: (_, variables) => {
-      // Invalida mensagens da conversa e lista de conversas
       void queryClient.invalidateQueries({ queryKey: conversationKeys.messages(variables.conversationId) });
       void queryClient.invalidateQueries({ queryKey: conversationKeys.lists() });
     },

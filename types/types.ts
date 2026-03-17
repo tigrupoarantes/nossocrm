@@ -565,18 +565,28 @@ export interface AutomationExecution {
 }
 
 // =============================================================================
-// WhatsApp / Conversations
+// Omnichannel Conversations
 // =============================================================================
 
 export type WhatsAppProvider = 'twilio' | 'waha';
+
+/** Canal de comunicação suportado pela plataforma omnichannel. */
+export type ConversationChannel = 'whatsapp' | 'instagram' | 'facebook' | 'email';
 
 export interface Conversation {
   id: string;
   organizationId: string;
   contactId: string | null;
   dealId: string | null;
-  channel: 'whatsapp';
-  waChatId: string;
+  channel: ConversationChannel;
+  /** ID de chat do WhatsApp (ex.: "5511999990000@c.us"). Nullable para canais não-WhatsApp. */
+  waChatId: string | null;
+  /** ID de conversa do Instagram (PSID do usuário). */
+  igConversationId: string | null;
+  /** ID de conversa do Facebook Messenger (PSID do usuário). */
+  fbConversationId: string | null;
+  /** Metadados extras do canal (ex.: nome do perfil, foto). */
+  channelMetadata: Record<string, unknown>;
   lastMessageAt: string | null;
   unreadCount: number;
   createdAt: string;
@@ -585,16 +595,49 @@ export interface Conversation {
 
 export type MessageDirection = 'inbound' | 'outbound';
 export type MessageStatus = 'sent' | 'delivered' | 'read' | 'failed';
+export type MessageType =
+  | 'text'
+  | 'image'
+  | 'video'
+  | 'audio'
+  | 'file'
+  | 'story_reply'
+  | 'story_mention'
+  | 'reaction';
 
 export interface Message {
   id: string;
   organizationId: string;
   conversationId: string;
-  waMessageId: string;
+  /** ID da mensagem no WhatsApp (WAHA). Nullable para canais não-WhatsApp. */
+  waMessageId: string | null;
+  /** ID genérico da mensagem no canal externo (usado para deduplicação). */
+  externalMessageId: string | null;
+  /** Canal pelo qual esta mensagem foi enviada/recebida. */
+  channel: ConversationChannel;
+  messageType: MessageType;
   direction: MessageDirection;
   body: string;
   mediaUrl: string | null;
   status: MessageStatus;
   sentAt: string;
   createdAt: string;
+  /** Metadados extras (ex.: URL do story respondido, emoji de reação). */
+  metadata: Record<string, unknown>;
+}
+
+/** Canal de comunicação conectado a uma organização. */
+export interface ConnectedChannel {
+  id: string;
+  organizationId: string;
+  channel: ConversationChannel;
+  /** ID externo da conta (page ID, IG account ID, nome de sessão WAHA). */
+  externalId: string;
+  name: string;
+  avatarUrl: string | null;
+  isActive: boolean;
+  /** Quando o token de acesso expira. Null = não expira. */
+  expiresAt: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
