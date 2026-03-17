@@ -19,7 +19,7 @@ interface DealConversationsTabProps {
 
 function NoConversations() {
   return (
-    <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-6 py-8">
+    <div className="flex flex-col items-center justify-center flex-1 gap-3 text-center px-6 py-8">
       <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-white/5 flex items-center justify-center">
         <MessageSquare size={24} className="text-slate-300 dark:text-slate-600" />
       </div>
@@ -28,7 +28,7 @@ function NoConversations() {
           Nenhuma conversa ainda
         </p>
         <p className="text-xs text-slate-400 dark:text-slate-500">
-          As conversas aparecerão aqui quando o contato enviar uma mensagem.
+          Envie a primeira mensagem para iniciar o contato.
         </p>
       </div>
     </div>
@@ -80,7 +80,7 @@ export function DealConversationsTab({ dealId }: DealConversationsTabProps) {
             >
               <ChannelBadge channel={conv.channel as ConversationChannel} size="sm" />
               {conv.unread_count > 0 && (
-                <span className="bg-green-500 text-white text-[9px] font-bold rounded-full px-1 min-w-[14px] text-center">
+                <span className="bg-green-500 text-white text-[9px] font-bold rounded-full px-1 min-w-3.5 text-center">
                   {conv.unread_count}
                 </span>
               )}
@@ -94,17 +94,14 @@ export function DealConversationsTab({ dealId }: DealConversationsTabProps) {
         {!hasConversations && !isLoading ? (
           <NoConversations />
         ) : (
-          <>
-            <ConversationThread messages={visibleMessages} loading={isLoading} />
-            <MessageInput
-              onSend={handleSend}
-              availableChannels={availableChannels.length > 0 ? availableChannels : ['whatsapp']}
-              defaultChannel={defaultChannel}
-              isSending={isSending}
-              disabled={!hasConversations}
-            />
-          </>
+          <ConversationThread messages={visibleMessages} loading={isLoading} />
         )}
+        <MessageInput
+          onSend={handleSend}
+          availableChannels={availableChannels.length > 0 ? availableChannels : ['whatsapp']}
+          defaultChannel={defaultChannel}
+          isSending={isSending}
+        />
       </div>
     </div>
   );

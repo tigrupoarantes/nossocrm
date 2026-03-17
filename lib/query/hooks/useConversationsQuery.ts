@@ -163,6 +163,35 @@ export function useSendMessage() {
 }
 
 /**
+ * Mutation para iniciar uma conversa nova a partir de um deal (proactive outbound).
+ * Cria a conversa no banco e envia a primeira mensagem.
+ */
+export function useInitiateConversation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (params: { dealId: string; channel: ConversationChannel; body: string }) => {
+      const response = await fetch(`/api/deals/${params.dealId}/conversations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channel: params.channel, text: params.body }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({})) as { error?: string };
+        throw new Error(err.error ?? `Initiate failed: ${response.status}`);
+      }
+
+      return response.json() as Promise<{ ok: boolean; conversationId: string }>;
+    },
+    onSuccess: (_, variables) => {
+      void queryClient.invalidateQueries({ queryKey: conversationKeys.forDeal(variables.dealId) });
+      void queryClient.invalidateQueries({ queryKey: conversationKeys.lists() });
+    },
+  });
+}
+
+/**
  * @deprecated Use useSendMessage() — suporta todos os canais via router omnichannel.
  * Mantido para compatibilidade com InboxConversationsView existente.
  */

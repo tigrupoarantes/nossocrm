@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { useDealConversations, useSendMessage } from '@/lib/query/hooks/useConversationsQuery';
+import { useDealConversations, useSendMessage, useInitiateConversation } from '@/lib/query/hooks/useConversationsQuery';
 import type { ConversationChannel, Message } from '@/types';
 
 /**
@@ -18,6 +18,7 @@ export function useDealConversationsController(dealId: string | null) {
 
   const { data: conversations = [], isLoading } = useDealConversations(dealId);
   const sendMessage = useSendMessage();
+  const initiateConversation = useInitiateConversation();
 
   // Todas as mensagens de todas as conversas, ordenadas por sent_at
   const allMessages = useMemo((): Message[] => {
@@ -63,7 +64,13 @@ export function useDealConversationsController(dealId: string | null) {
   }, [selectedConversationId, conversations]);
 
   const handleSend = async (body: string, channel: ConversationChannel) => {
-    if (!targetConversation) return;
+    if (!dealId) return;
+
+    if (!targetConversation) {
+      // Nenhuma conversa existente — iniciar nova (proactive outbound)
+      await initiateConversation.mutateAsync({ dealId, channel, body });
+      return;
+    }
 
     // Encontrar conversa do canal selecionado (ou usar a primeira disponível)
     const conv =
@@ -87,7 +94,7 @@ export function useDealConversationsController(dealId: string | null) {
     selectedConversationId,
     setSelectedConversationId,
     isLoading,
-    isSending: sendMessage.isPending,
+    isSending: sendMessage.isPending || initiateConversation.isPending,
     handleSend,
     hasConversations: conversations.length > 0,
   };

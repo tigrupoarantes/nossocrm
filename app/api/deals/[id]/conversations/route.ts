@@ -86,3 +86,155 @@ export async function GET(_req: Request, { params }: RouteParams) {
 
   return NextResponse.json({ data });
 }
+
+// =============================================================================
+// POST /api/deals/[id]/conversations
+// Cria nova conversa + envia primeira mensagem (proactive outbound)
+// Body: { channel: ConversationChannel, body: string }
+// =============================================================================
+
+export async function POST(req: Request, { params }: RouteParams) {
+  const { id: dealId } = await params;
+
+  const supabase = await createClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('organization_id')
+    .eq('id', user.id)
+    .single();
+
+  if (!profile?.organization_id) {
+    return NextResponse.json({ error: 'Profile not found' }, { status: 403 });
+  }
+
+  let body: { channel?: string; text?: string };
+  try {
+    body = await req.json() as { channel?: string; text?: string };
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+  }
+
+  const channel = (body.channel ?? 'whatsapp') as string;
+  const text = body.text ?? '';
+
+  if (!text.trim()) {
+    return NextResponse.json({ error: 'Message body is required' }, { status: 400 });
+  }
+
+  if (!['whatsapp', 'instagram', 'facebook', 'email'].includes(channel)) {
+    return NextResponse.json({ error: 'Invalid channel' }, { status: 400 });
+  }
+
+  // Buscar deal + contato para obter telefone / IDs externos
+  const { data: deal } = await supabase
+    .from('deals')
+    .select('id, contact_id, contacts ( id, name, phone )')
+    .eq('id', dealId)
+    .eq('organization_id', profile.organization_id)
+    .single();
+
+  if (!deal) {
+    return NextResponse.json({ error: 'Deal not found' }, { status: 404 });
+  }
+
+  type ContactRow = { id: string; name: string; phone: string | null };
+  const contactsRaw = deal.contacts as ContactRow | ContactRow[] | null;
+  const contact = Array.isArray(contactsRaw) ? (contactsRaw[0] ?? null) : contactsRaw;
+
+  if (!contact) {
+    return NextResponse.json({ error: 'Deal has no contact' }, { status: 422 });
+  }
+
+  // Para WhatsApp: o destinatário é o telefone do contato
+  if (channel === 'whatsapp' && !contact.phone) {
+    return NextResponse.json({ error: 'Contact has no phone number for WhatsApp' }, { status: 422 });
+  }
+
+  // Derivar wa_chat_id a partir do telefone do contato
+  const waChatId = channel === 'whatsapp' && contact.phone
+    ? contact.phone.replace(/\D/g, '') + '@c.us'
+    : null;
+
+  // Verificar se já existe conversa para este deal/canal (evitar duplicata)
+  const { data: existing } = await supabase
+    .from('conversations')
+    .select('id')
+    .eq('deal_id', dealId)
+    .eq('organization_id', profile.organization_id)
+    .eq('channel', channel)
+    .maybeSingle();
+
+  let conversationId: string;
+
+  if (existing) {
+    conversationId = existing.id;
+  } else {
+    // Criar nova conversa
+    const { data: newConv, error: createErr } = await supabase
+      .from('conversations')
+      .insert({
+        organization_id: profile.organization_id,
+        contact_id: contact.id,
+        deal_id: dealId,
+        channel,
+        wa_chat_id: waChatId,
+        unread_count: 0,
+        channel_metadata: {},
+      })
+      .select('id')
+      .single();
+
+    if (createErr || !newConv) {
+      return NextResponse.json({ error: 'Failed to create conversation' }, { status: 500 });
+    }
+
+    conversationId = newConv.id;
+  }
+
+  // Enviar mensagem via router omnichannel
+  const { routeAndSendMessage } = await import('@/lib/communication/message-router');
+
+  let externalMessageId: string;
+  try {
+    const result = await routeAndSendMessage(supabase, {
+      conversationId,
+      body: text,
+      channel: channel as 'whatsapp' | 'instagram' | 'facebook' | 'email',
+    });
+    externalMessageId = result.externalMessageId;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Send failed';
+    return NextResponse.json({ error: msg }, { status: 502 });
+  }
+
+  // Persistir mensagem
+  const now = new Date().toISOString();
+  const { data: message } = await supabase
+    .from('messages')
+    .insert({
+      organization_id: profile.organization_id,
+      conversation_id: conversationId,
+      channel,
+      external_message_id: externalMessageId,
+      message_type: 'text',
+      direction: 'outbound',
+      body: text,
+      status: 'sent',
+      sent_at: now,
+      metadata: {},
+    })
+    .select()
+    .single();
+
+  // Atualizar last_message_at
+  await supabase
+    .from('conversations')
+    .update({ last_message_at: now })
+    .eq('id', conversationId);
+
+  return NextResponse.json({ ok: true, conversationId, message }, { status: 201 });
+}
