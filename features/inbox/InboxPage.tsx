@@ -5,6 +5,7 @@ import { ViewModeToggle } from './components/ViewModeToggle';
 import { InboxOverviewView } from './components/InboxOverviewView';
 import { InboxListView } from './components/InboxListView';
 import { InboxFocusView } from './components/InboxFocusView';
+import { InboxConversationsView } from './components/InboxConversationsView';
 import { DebugFillButton } from '@/components/debug/DebugFillButton';
 
 /**
@@ -131,6 +132,8 @@ export const InboxPage: React.FC = () => {
             }
           }}
         />
+      ) : viewMode === 'conversations' ? (
+        <InboxConversationsView />
       ) : (
         <InboxFocusView
           currentItem={currentFocusItem}

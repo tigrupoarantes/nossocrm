@@ -38,11 +38,18 @@ const CustomerBaseSchema = z.object({
   timeoutMs: z.number().optional(),
 }).nullable();
 
+const WahaSchema = z.object({
+  baseUrl: z.string().url(),
+  apiKey: z.string().min(1),
+  sessionName: z.string().min(1).default('default'),
+}).nullable();
+
 const PutSchema = z.object({
   smtp: SmtpSchema.optional(),
   twilio: TwilioSchema.optional(),
   serasa: SerasaSchema.optional(),
   customerBase: CustomerBaseSchema.optional(),
+  waha: WahaSchema.optional(),
 });
 
 // =============================================================================
@@ -66,7 +73,7 @@ export async function GET() {
 
   const { data: settings } = await supabase
     .from('organization_settings')
-    .select('smtp_config, twilio_config, serasa_config, customer_base_config')
+    .select('smtp_config, twilio_config, serasa_config, customer_base_config, waha_config')
     .eq('organization_id', profile.organization_id)
     .single();
 
@@ -74,6 +81,7 @@ export async function GET() {
   const twilio = (settings as any)?.twilio_config ?? null;
   const serasa = (settings as any)?.serasa_config ?? null;
   const customerBase = (settings as any)?.customer_base_config ?? null;
+  const waha = (settings as any)?.waha_config ?? null;
 
   // Mascarar campos sensíveis antes de retornar
   return NextResponse.json({
@@ -81,11 +89,13 @@ export async function GET() {
     twilio: twilio ? { ...twilio, authToken: twilio.authToken ? '••••••••' : '' } : null,
     serasa: serasa ? { ...serasa, clientSecret: serasa.clientSecret ? '••••••••' : '' } : null,
     customerBase: customerBase ? { ...customerBase, apiKey: customerBase.apiKey ? '••••••••' : '' } : null,
+    waha: waha ? { ...waha, apiKey: waha.apiKey ? '••••••••' : '' } : null,
     configured: {
       smtp: !!(smtp?.host),
       twilio: !!(twilio?.accountSid),
       serasa: !!(serasa?.clientId),
       customerBase: !!(customerBase?.baseUrl),
+      waha: !!(waha?.baseUrl),
     },
   });
 }
@@ -164,6 +174,18 @@ export async function PUT(request: Request) {
       parsed.data.customerBase.apiKey = (existing as any)?.customer_base_config?.apiKey ?? '';
     }
     updates.customer_base_config = parsed.data.customerBase;
+  }
+
+  if (parsed.data.waha !== undefined) {
+    if (parsed.data.waha?.apiKey === '••••••••') {
+      const { data: existing } = await supabase
+        .from('organization_settings')
+        .select('waha_config')
+        .eq('organization_id', profile.organization_id)
+        .single();
+      parsed.data.waha.apiKey = (existing as any)?.waha_config?.apiKey ?? '';
+    }
+    updates.waha_config = parsed.data.waha;
   }
 
   const { error } = await supabase

@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, List, Target } from 'lucide-react';
+import { LayoutDashboard, List, Target, MessageSquare } from 'lucide-react';
 import { ViewMode } from '../hooks/useInboxController';
 
 interface ViewModeToggleProps {
@@ -48,6 +48,17 @@ export const ViewModeToggle: React.FC<ViewModeToggleProps> = ({ mode, onChange }
       >
         <Target size={16} aria-hidden="true" />
         Foco
+      </button>
+      <button
+        onClick={() => onChange('conversations')}
+        aria-pressed={mode === 'conversations'}
+        className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${mode === 'conversations'
+            ? 'bg-white dark:bg-dark-card text-slate-900 dark:text-white shadow-sm'
+            : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+          }`}
+      >
+        <MessageSquare size={16} aria-hidden="true" />
+        Conversas
       </button>
     </div>
   );

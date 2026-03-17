@@ -39,7 +39,7 @@ export interface AISuggestion {
   createdAt: string;
 }
 
-export type ViewMode = 'overview' | 'list' | 'focus';
+export type ViewMode = 'overview' | 'list' | 'focus' | 'conversations';
 
 // Item unificado para o modo Focus (atividade ou sugestão)
 export interface FocusItem {

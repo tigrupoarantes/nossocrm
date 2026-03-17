@@ -64,6 +64,16 @@ const supabaseMock = {
         })),
       }
     }
+    if (table === 'organization_settings') {
+      return {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        single: vi.fn(async () => ({
+          data: { twilio_config: { accountSid: 'ACtest', authToken: 'token', fromPhone: '+15005550006' }, waha_config: null },
+          error: null,
+        })),
+      }
+    }
     return {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),

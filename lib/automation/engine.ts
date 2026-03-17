@@ -112,13 +112,36 @@ async function executeAction(
       }
 
       case 'send_whatsapp': {
-        const { sendAutomationWhatsApp } = await import('@/lib/communication/whatsapp');
-        const result = await sendAutomationWhatsApp(supabase, {
-          dealId: schedule.dealId,
-          organizationId: schedule.organizationId,
-          templateId: actionConfig.templateId ?? 'primeiro-contato',
-        });
-        return { success: true, result };
+        // Provider selection: WAHA (se configurado) → Twilio (fallback)
+        const { data: orgSettings } = await supabase
+          .from('organization_settings')
+          .select('waha_config, twilio_config')
+          .eq('organization_id', schedule.organizationId)
+          .single();
+
+        const wahaConfig = (orgSettings as any)?.waha_config;
+        const twilioConfig = (orgSettings as any)?.twilio_config;
+        const templateId = actionConfig.templateId ?? 'primeiro-contato';
+
+        if (wahaConfig?.baseUrl) {
+          const { sendAutomationWaha } = await import('@/lib/communication/waha');
+          const result = await sendAutomationWaha(supabase, {
+            dealId: schedule.dealId,
+            organizationId: schedule.organizationId,
+            templateId,
+          });
+          return { success: true, result };
+        } else if (twilioConfig?.accountSid) {
+          const { sendAutomationWhatsApp } = await import('@/lib/communication/whatsapp');
+          const result = await sendAutomationWhatsApp(supabase, {
+            dealId: schedule.dealId,
+            organizationId: schedule.organizationId,
+            templateId,
+          });
+          return { success: true, result };
+        } else {
+          throw new Error('No WhatsApp provider configured (WAHA or Twilio required)');
+        }
       }
 
       case 'move_stage': {

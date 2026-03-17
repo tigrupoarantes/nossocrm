@@ -17,7 +17,7 @@ vi.stubGlobal('fetch', fetchMock)
 // Factory de mock do Supabase (para orchestrateD0Validations)
 // ---------------------------------------------------------------------------
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 function makeSupa(opts: { serasaConfig?: unknown } = {}): any {
   return {
     from: (_table: string) => ({

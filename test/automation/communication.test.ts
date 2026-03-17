@@ -70,7 +70,7 @@ describe('sendEmail', () => {
 
     expect(createTransportMock).toHaveBeenCalledOnce()
     expect(sendMailMock).toHaveBeenCalledOnce()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const mailOptions = (sendMailMock.mock.calls as any[])[0][0] as Record<string, unknown>
     expect(mailOptions.to).toBe('joao@example.com')
     expect(mailOptions.subject).toBe('Olá da NossoCRM')
@@ -137,7 +137,7 @@ describe('sendWhatsApp', () => {
     })
 
     expect(fetchMock).toHaveBeenCalledOnce()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const [url, options] = (fetchMock.mock.calls as any[])[0] as [string, RequestInit]
     expect(url).toContain('ACtest123')
     expect(url).toContain('Messages.json')

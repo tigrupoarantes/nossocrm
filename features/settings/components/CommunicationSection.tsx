@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { Mail, MessageCircle, Shield, Building2, CheckCircle, XCircle, Loader2, Eye, EyeOff } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Mail, MessageCircle, Shield, Building2, CheckCircle, XCircle, Loader2, Eye, EyeOff, Smartphone } from 'lucide-react';
 import { useToast } from '@/context/ToastContext';
 
 // =============================================================================
@@ -36,11 +36,26 @@ interface CustomerBaseForm {
   apiKey: string;
 }
 
+interface WahaForm {
+  baseUrl: string;
+  apiKey: string;
+  sessionName: string;
+}
+
+type WahaSessionStatus = 'STOPPED' | 'STARTING' | 'SCAN_QR_CODE' | 'WORKING' | 'FAILED';
+
+interface WahaSessionState {
+  status: WahaSessionStatus | null;
+  qr: string | null;
+  loading: boolean;
+}
+
 interface ConfigStatus {
   smtp: boolean;
   twilio: boolean;
   serasa: boolean;
   customerBase: boolean;
+  waha: boolean;
 }
 
 // =============================================================================
@@ -120,9 +135,9 @@ export function CommunicationSection() {
   const { addToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [testing, setTesting] = useState<'smtp' | 'twilio' | null>(null);
+  const [testing, setTesting] = useState<'smtp' | 'twilio' | 'waha' | null>(null);
 
-  const [status, setStatus] = useState<ConfigStatus>({ smtp: false, twilio: false, serasa: false, customerBase: false });
+  const [status, setStatus] = useState<ConfigStatus>({ smtp: false, twilio: false, serasa: false, customerBase: false, waha: false });
 
   const [smtp, setSmtp] = useState<SmtpForm>({
     host: '', port: 587, secure: false, user: '', pass: '', fromName: '', fromEmail: '',
@@ -139,6 +154,16 @@ export function CommunicationSection() {
   const [customerBase, setCustomerBase] = useState<CustomerBaseForm>({
     baseUrl: '', apiKey: '',
   });
+
+  const [waha, setWaha] = useState<WahaForm>({
+    baseUrl: '', apiKey: '', sessionName: 'default',
+  });
+
+  const [wahaSession, setWahaSession] = useState<WahaSessionState>({
+    status: null, qr: null, loading: false,
+  });
+
+  const wahaQrInterval = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Carregar configurações existentes
   useEffect(() => {
@@ -158,10 +183,75 @@ export function CommunicationSection() {
         if (data.customerBase) {
           setCustomerBase(s => ({ ...s, ...data.customerBase, apiKey: '' }));
         }
+        if (data.waha) {
+          setWaha(s => ({ ...s, ...data.waha, apiKey: '' }));
+        }
       })
       .catch(() => addToast('Erro ao carregar configurações', 'error'))
       .finally(() => setLoading(false));
   }, []);
+
+  // Limpar interval do QR ao desmontar
+  useEffect(() => {
+    return () => {
+      if (wahaQrInterval.current) clearInterval(wahaQrInterval.current);
+    };
+  }, []);
+
+  const fetchWahaSession = async () => {
+    setWahaSession(s => ({ ...s, loading: true }));
+    try {
+      const res = await fetch('/api/settings/communication/waha-session');
+      if (!res.ok) {
+        setWahaSession({ status: 'STOPPED', qr: null, loading: false });
+        return;
+      }
+      const data = await res.json() as { status: { status: WahaSessionStatus }; qr?: { value: string } | null };
+      setWahaSession({
+        status: data.status?.status ?? 'STOPPED',
+        qr: data.qr?.value ?? null,
+        loading: false,
+      });
+    } catch {
+      setWahaSession({ status: 'STOPPED', qr: null, loading: false });
+    }
+  };
+
+  const handleWahaStartSession = async () => {
+    try {
+      const res = await fetch('/api/settings/communication/waha-session', { method: 'POST' });
+      if (!res.ok) {
+        addToast('Erro ao iniciar sessão WAHA', 'error');
+        return;
+      }
+      addToast('Sessão iniciada. Aguardando QR...', 'info');
+      await fetchWahaSession();
+      // Auto-refresh enquanto aguarda scan
+      wahaQrInterval.current = setInterval(async () => {
+        await fetchWahaSession();
+        if (wahaSession.status === 'WORKING') {
+          if (wahaQrInterval.current) clearInterval(wahaQrInterval.current);
+        }
+      }, 5000);
+    } catch {
+      addToast('Erro ao iniciar sessão WAHA', 'error');
+    }
+  };
+
+  const handleWahaStopSession = async () => {
+    try {
+      if (wahaQrInterval.current) clearInterval(wahaQrInterval.current);
+      const res = await fetch('/api/settings/communication/waha-session', { method: 'DELETE' });
+      if (!res.ok) {
+        addToast('Erro ao encerrar sessão WAHA', 'error');
+        return;
+      }
+      addToast('Sessão encerrada', 'success');
+      setWahaSession({ status: 'STOPPED', qr: null, loading: false });
+    } catch {
+      addToast('Erro ao encerrar sessão WAHA', 'error');
+    }
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -172,6 +262,7 @@ export function CommunicationSection() {
       if (twilio.accountSid) payload.twilio = twilio;
       if (serasa.clientId) payload.serasa = serasa;
       if (customerBase.baseUrl) payload.customerBase = customerBase;
+      if (waha.baseUrl) payload.waha = waha;
 
       const res = await fetch('/api/settings/communication', {
         method: 'PUT',
@@ -189,6 +280,7 @@ export function CommunicationSection() {
         twilio: !!twilio.accountSid,
         serasa: !!serasa.clientId,
         customerBase: !!customerBase.baseUrl,
+        waha: !!waha.baseUrl,
       });
     } catch {
       addToast('Erro ao salvar configurações', 'error');
@@ -228,6 +320,24 @@ export function CommunicationSection() {
       else addToast(`Falha Twilio: ${data.error}`, 'error');
     } catch {
       addToast('Erro ao testar Twilio', 'error');
+    } finally {
+      setTesting(null);
+    }
+  };
+
+  const handleTestWaha = async () => {
+    setTesting('waha');
+    try {
+      const res = await fetch('/api/settings/communication/test-waha', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(waha),
+      });
+      const data = await res.json() as { ok: boolean; error?: string };
+      if (data.ok) addToast('Conexão WAHA funcionando!', 'success');
+      else addToast(`Falha WAHA: ${data.error ?? 'Erro desconhecido'}`, 'error');
+    } catch {
+      addToast('Erro ao testar WAHA', 'error');
     } finally {
       setTesting(null);
     }
@@ -342,6 +452,101 @@ export function CommunicationSection() {
         </div>
         <p className="text-xs text-slate-400">
           Usada no D+0 para verificar se o CNPJ já é cliente ativo. Não bloqueia o fluxo — apenas registra no card.
+        </p>
+      </ConfigCard>
+
+      {/* WAHA WhatsApp */}
+      <ConfigCard title="WhatsApp (WAHA)" icon={Smartphone} configured={status.waha}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="sm:col-span-2">
+            <Field label="URL base do servidor WAHA">
+              <input className={INPUT} value={waha.baseUrl} onChange={e => setWaha(s => ({ ...s, baseUrl: e.target.value }))} placeholder="http://localhost:3000" />
+              <p className="text-xs text-slate-400 mt-1">Endereço onde o WAHA está rodando (ex.: Docker local ou VPS)</p>
+            </Field>
+          </div>
+          <Field label="API Key">
+            <PasswordField value={waha.apiKey} onChange={v => setWaha(s => ({ ...s, apiKey: v }))} />
+          </Field>
+          <Field label="Nome da sessão">
+            <input className={INPUT} value={waha.sessionName} onChange={e => setWaha(s => ({ ...s, sessionName: e.target.value }))} placeholder="default" />
+          </Field>
+        </div>
+        <div className="flex items-center gap-2 mt-2">
+          <button
+            onClick={handleTestWaha}
+            disabled={!waha.baseUrl || testing === 'waha'}
+            className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-primary-600 dark:text-primary-400 border border-primary-200 dark:border-primary-800 rounded-lg hover:bg-primary-50 dark:hover:bg-primary-900/20 disabled:opacity-50 transition-colors"
+          >
+            {testing === 'waha' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+            Testar conexão
+          </button>
+          {status.waha && (
+            <button
+              onClick={fetchWahaSession}
+              disabled={wahaSession.loading}
+              className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-white/10 rounded-lg hover:bg-slate-50 dark:hover:bg-white/5 disabled:opacity-50 transition-colors"
+            >
+              {wahaSession.loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+              Ver status da sessão
+            </button>
+          )}
+        </div>
+
+        {/* Painel de sessão */}
+        {wahaSession.status && (
+          <div className="mt-3 p-3 rounded-lg bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className={`w-2 h-2 rounded-full ${
+                  wahaSession.status === 'WORKING' ? 'bg-green-500' :
+                  wahaSession.status === 'SCAN_QR_CODE' ? 'bg-yellow-500 animate-pulse' :
+                  'bg-red-400'
+                }`} />
+                <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                  {wahaSession.status === 'WORKING' ? 'Conectado' :
+                   wahaSession.status === 'SCAN_QR_CODE' ? 'Aguardando escaneamento do QR' :
+                   wahaSession.status === 'STARTING' ? 'Iniciando...' :
+                   'Desconectado'}
+                </span>
+              </div>
+              <div className="flex gap-2">
+                {wahaSession.status !== 'WORKING' && wahaSession.status !== 'STARTING' && (
+                  <button
+                    onClick={handleWahaStartSession}
+                    className="text-xs px-2 py-1 text-green-600 dark:text-green-400 border border-green-200 dark:border-green-800 rounded hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors"
+                  >
+                    Iniciar sessão
+                  </button>
+                )}
+                {(wahaSession.status === 'WORKING' || wahaSession.status === 'STARTING') && (
+                  <button
+                    onClick={handleWahaStopSession}
+                    className="text-xs px-2 py-1 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 rounded hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                  >
+                    Encerrar sessão
+                  </button>
+                )}
+              </div>
+            </div>
+            {wahaSession.status === 'SCAN_QR_CODE' && wahaSession.qr && (
+              <div className="flex flex-col items-center gap-2">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Abra o WhatsApp no celular → Dispositivos conectados → Conectar um dispositivo
+                </p>
+                {wahaSession.qr.startsWith('data:') ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={wahaSession.qr} alt="QR Code WAHA" className="w-48 h-48 border border-slate-200 dark:border-white/10 rounded-lg" />
+                ) : (
+                  <div className="p-2 bg-white rounded-lg">
+                    <p className="text-xs font-mono break-all text-slate-600 max-w-xs">{wahaSession.qr}</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+        <p className="text-xs text-slate-400 mt-2">
+          Gateway WhatsApp self-hosted. Alternativa ao Twilio — sem custo por mensagem. Requer Docker.
         </p>
       </ConfigCard>
 

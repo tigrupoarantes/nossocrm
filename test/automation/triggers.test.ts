@@ -12,7 +12,7 @@ const { insertMock, fromMock, rulesHolder } = vi.hoisted(() => {
   const insertMock = vi.fn(async () => ({ error: null }))
   const rulesHolder: { data: unknown[] } = { data: [] }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const fromMock = vi.fn((_table: string): any => {
     if (_table === 'automation_rules') {
       return {
@@ -49,7 +49,7 @@ import {
 
 // ---------------------------------------------------------------------------
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 function makeRule(overrides: Record<string, any> = {}) {
   return {
     id: 'rule-1',
@@ -82,7 +82,7 @@ describe('cancelPendingSchedules', () => {
   it('chama update com status cancelled no deal correto', async () => {
     const statusEqMock = vi.fn(async () => ({ error: null }))
     const dealEqMock = vi.fn(() => ({ eq: statusEqMock }))
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     ;(fromMock as any).mockReturnValueOnce({ update: vi.fn(() => ({ eq: dealEqMock })) })
 
     await cancelPendingSchedules('deal-abc')
@@ -109,7 +109,7 @@ describe('onDealCreated', () => {
     await onDealCreated({ dealId: 'deal-1', boardId: 'board-1', organizationId: 'org-1' })
 
     expect(insertMock).toHaveBeenCalledOnce()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const payload = (insertMock.mock.calls as any[])[0][0] as Record<string, unknown>
     expect(payload.deal_id).toBe('deal-1')
     expect(payload.organization_id).toBe('org-1')
@@ -148,7 +148,7 @@ describe('onStageEntered', () => {
     // onStageEntered busca stage_entered + days_in_stage em 2 queries;
     // com mock sem discriminação de trigger_type, a regra é retornada por ambas → 2 inserts.
     expect(insertMock).toHaveBeenCalled()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const payload = (insertMock.mock.calls as any[])[0][0] as Record<string, unknown>
     const scheduledAt = new Date(payload.scheduled_at as string).getTime()
     expect(scheduledAt).toBeGreaterThan(before + 3 * 24 * 60 * 60 * 1000 - 1000)
@@ -178,7 +178,7 @@ describe('onResponseReceived', () => {
     await onResponseReceived({ dealId: 'deal-3', boardId: 'board-1', organizationId: 'org-1' })
 
     expect(insertMock).toHaveBeenCalledOnce()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const payload = (insertMock.mock.calls as any[])[0][0] as Record<string, unknown>
     expect(payload.deal_id).toBe('deal-3')
     expect(payload.status).toBe('pending')

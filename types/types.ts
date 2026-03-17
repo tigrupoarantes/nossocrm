@@ -531,6 +531,8 @@ export interface AutomationRule {
     toBoardId?: string;
     minimumScore?: number;
     cancelPending?: boolean;
+    /** Override do provider WhatsApp. 'auto' = WAHA se configurado, senão Twilio. */
+    whatsappProvider?: 'auto' | 'waha' | 'twilio';
   };
   isActive: boolean;
   position: number;
@@ -560,4 +562,39 @@ export interface AutomationExecution {
   result: Record<string, unknown> | null;
   success: boolean;
   executedAt: string;
+}
+
+// =============================================================================
+// WhatsApp / Conversations
+// =============================================================================
+
+export type WhatsAppProvider = 'twilio' | 'waha';
+
+export interface Conversation {
+  id: string;
+  organizationId: string;
+  contactId: string | null;
+  dealId: string | null;
+  channel: 'whatsapp';
+  waChatId: string;
+  lastMessageAt: string | null;
+  unreadCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type MessageDirection = 'inbound' | 'outbound';
+export type MessageStatus = 'sent' | 'delivered' | 'read' | 'failed';
+
+export interface Message {
+  id: string;
+  organizationId: string;
+  conversationId: string;
+  waMessageId: string;
+  direction: MessageDirection;
+  body: string;
+  mediaUrl: string | null;
+  status: MessageStatus;
+  sentAt: string;
+  createdAt: string;
 }
