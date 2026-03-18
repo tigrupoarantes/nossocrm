@@ -73,7 +73,8 @@ export async function POST(req: Request) {
   } catch (err) {
     if (err instanceof AITaskHttpError) return err.toResponse();
     if (err instanceof z.ZodError) {
-      return json({ error: err.errors[0].message }, 400);
+      const issue = err.issues?.[0] ?? err;
+      return json({ error: (issue as { message?: string }).message ?? 'Payload inválido.' }, 400);
     }
     console.error('[api/landing-pages/generate]', err);
     return json({ error: 'Erro ao gerar landing page. Tente novamente.' }, 500);
