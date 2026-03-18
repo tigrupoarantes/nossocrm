@@ -276,7 +276,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                 <Link
                   key={item.to}
                   href={item.to}
-                  onMouseEnter={() => prefetchRoute(item.prefetch)}
+                  onMouseEnter={item.prefetch ? () => prefetchRoute(item.prefetch!) : undefined}
                   onClick={() => setClickedPath(item.to)}
                   className={(() => {
                     const isActive = pathname === item.to || (item.to === '/boards' && pathname === '/pipeline');
