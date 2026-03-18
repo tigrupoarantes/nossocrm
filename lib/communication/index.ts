@@ -28,3 +28,12 @@ export type {
   WahaQrCode,
   AutomationWahaParams,
 } from './waha';
+
+export { sendInstagramMessage } from './meta-instagram';
+export type { SendInstagramParams, InstagramSendResult } from './meta-instagram';
+
+export { sendFacebookMessage } from './meta-facebook';
+export type { SendFacebookParams, FacebookSendResult } from './meta-facebook';
+
+export { routeAndSendMessage } from './message-router';
+export type { RouteMessageParams, RouteMessageResult } from './message-router';

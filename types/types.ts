@@ -565,18 +565,28 @@ export interface AutomationExecution {
 }
 
 // =============================================================================
-// WhatsApp / Conversations
+// Omnichannel Conversations
 // =============================================================================
 
 export type WhatsAppProvider = 'twilio' | 'waha';
+
+/** Canal de comunicação suportado pela plataforma omnichannel. */
+export type ConversationChannel = 'whatsapp' | 'instagram' | 'facebook' | 'email';
 
 export interface Conversation {
   id: string;
   organizationId: string;
   contactId: string | null;
   dealId: string | null;
-  channel: 'whatsapp';
-  waChatId: string;
+  channel: ConversationChannel;
+  /** ID de chat do WhatsApp (ex.: "5511999990000@c.us"). Nullable para canais não-WhatsApp. */
+  waChatId: string | null;
+  /** ID de conversa do Instagram (PSID do usuário). */
+  igConversationId: string | null;
+  /** ID de conversa do Facebook Messenger (PSID do usuário). */
+  fbConversationId: string | null;
+  /** Metadados extras do canal (ex.: nome do perfil, foto). */
+  channelMetadata: Record<string, unknown>;
   lastMessageAt: string | null;
   unreadCount: number;
   createdAt: string;
@@ -585,16 +595,109 @@ export interface Conversation {
 
 export type MessageDirection = 'inbound' | 'outbound';
 export type MessageStatus = 'sent' | 'delivered' | 'read' | 'failed';
+export type MessageType =
+  | 'text'
+  | 'image'
+  | 'video'
+  | 'audio'
+  | 'file'
+  | 'story_reply'
+  | 'story_mention'
+  | 'reaction';
 
 export interface Message {
   id: string;
   organizationId: string;
   conversationId: string;
-  waMessageId: string;
+  /** ID da mensagem no WhatsApp (WAHA). Nullable para canais não-WhatsApp. */
+  waMessageId: string | null;
+  /** ID genérico da mensagem no canal externo (usado para deduplicação). */
+  externalMessageId: string | null;
+  /** Canal pelo qual esta mensagem foi enviada/recebida. */
+  channel: ConversationChannel;
+  messageType: MessageType;
   direction: MessageDirection;
   body: string;
   mediaUrl: string | null;
   status: MessageStatus;
   sentAt: string;
+  createdAt: string;
+  /** Metadados extras (ex.: URL do story respondido, emoji de reação). */
+  metadata: Record<string, unknown>;
+}
+
+/** Canal de comunicação conectado a uma organização. */
+export interface ConnectedChannel {
+  id: string;
+  organizationId: string;
+  channel: ConversationChannel;
+  /** ID externo da conta (page ID, IG account ID, nome de sessão WAHA). */
+  externalId: string;
+  name: string;
+  avatarUrl: string | null;
+  isActive: boolean;
+  /** Quando o token de acesso expira. Null = não expira. */
+  expiresAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// =============================================================================
+// Landing Pages
+// =============================================================================
+
+export type LandingPageStatus = 'draft' | 'published' | 'archived';
+
+export interface LandingPageField {
+  name: string;
+  label: string;
+  type: 'text' | 'email' | 'tel' | 'textarea' | 'select';
+  required: boolean;
+  placeholder?: string;
+  options?: string[];
+}
+
+export interface LandingPage {
+  id: string;
+  organizationId: string;
+  title: string;
+  slug: string;
+  description: string | null;
+  htmlContent: string;
+  promptUsed: string | null;
+  aiModel: string | null;
+  targetBoardId: string | null;
+  targetStageId: string | null;
+  webhookApiKey: string;
+  customFields: LandingPageField[];
+  thankYouMessage: string;
+  thankYouRedirectUrl: string | null;
+  metaTitle: string | null;
+  metaDescription: string | null;
+  ogImageUrl: string | null;
+  googleAnalyticsId: string | null;
+  metaPixelId: string | null;
+  status: LandingPageStatus;
+  publishedAt: string | null;
+  viewsCount: number;
+  submissionsCount: number;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string | null;
+}
+
+export interface LandingPageSubmission {
+  id: string;
+  organizationId: string;
+  landingPageId: string;
+  contactId: string | null;
+  dealId: string | null;
+  formData: Record<string, string>;
+  ipAddress: string | null;
+  utmSource: string | null;
+  utmMedium: string | null;
+  utmCampaign: string | null;
+  utmTerm: string | null;
+  utmContent: string | null;
   createdAt: string;
 }

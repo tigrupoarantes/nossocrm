@@ -31,7 +31,7 @@ interface ConversationItemProps {
 
 function ConversationItem({ conversation, isSelected, onClick }: ConversationItemProps) {
   // Supabase retorna snake_case: wa_chat_id, unread_count, last_message_at
-  const contactName = conversation.contacts?.name ?? conversation.wa_chat_id.replace('@c.us', '');
+  const contactName = conversation.contacts?.name ?? (conversation.wa_chat_id?.replace('@c.us', '') ?? conversation.channel);
 
   return (
     <button
@@ -168,7 +168,8 @@ export function InboxConversationsView() {
   }
 
   const contactName = selectedConversation?.contacts?.name
-    ?? selectedConversation?.wa_chat_id.replace('@c.us', '')
+    ?? selectedConversation?.wa_chat_id?.replace('@c.us', '')
+    ?? selectedConversation?.channel
     ?? '';
 
   return (

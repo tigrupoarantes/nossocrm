@@ -43,7 +43,8 @@ import {
   Bug,
   CheckSquare,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  Layout as LayoutIcon,
 } from 'lucide-react';
 import { useCRM } from '../context/CRMContext';
 import { useAuth } from '../context/AuthContext';
@@ -266,6 +267,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             { to: '/boards', icon: KanbanSquare, label: 'Boards', prefetch: 'boards' as const },
             { to: '/contacts', icon: Users, label: 'Contatos', prefetch: 'contacts' as const },
             { to: '/activities', icon: CheckSquare, label: 'Atividades', prefetch: 'activities' as const },
+            { to: '/landing-pages', icon: LayoutIcon, label: 'Landing Pages' },
             { to: '/reports', icon: BarChart3, label: 'Relatórios', prefetch: 'reports' as const },
             { to: '/settings', icon: Settings, label: 'Configurações', prefetch: 'settings' as const },
           ].map((item) => {
@@ -274,7 +276,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                 <Link
                   key={item.to}
                   href={item.to}
-                  onMouseEnter={() => prefetchRoute(item.prefetch)}
+                  onMouseEnter={item.prefetch ? () => prefetchRoute(item.prefetch!) : undefined}
                   onClick={() => setClickedPath(item.to)}
                   className={(() => {
                     const isActive = pathname === item.to || (item.to === '/boards' && pathname === '/pipeline');

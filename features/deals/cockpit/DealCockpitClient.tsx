@@ -36,11 +36,12 @@ import { CallModal, type CallLogData } from '@/features/inbox/components/CallMod
 import { MessageComposerModal, type MessageChannel, type MessageExecutedEvent } from '@/features/inbox/components/MessageComposerModal';
 import { ScheduleModal, type ScheduleData, type ScheduleType } from '@/features/inbox/components/ScheduleModal';
 import { AutomationHistoryPanel } from '@/features/automation/components/AutomationHistoryPanel';
+import { DealConversationsTab } from '@/features/conversations';
 
 import type { QuickScript, ScriptCategory } from '@/lib/supabase/quickScripts';
 import type { Activity, Board, BoardStage, Contact, DealView } from '@/types';
 
-type Tab = 'chat' | 'notas' | 'scripts' | 'arquivos' | 'automacoes';
+type Tab = 'chat' | 'notas' | 'scripts' | 'arquivos' | 'automacoes' | 'conversas';
 
 // Performance: reuse Intl formatter instances (avoid creating them per call).
 const PT_BR_DATE_FORMATTER = new Intl.DateTimeFormat('pt-BR');
@@ -2275,6 +2276,9 @@ export default function DealCockpitClient({ dealId }: { dealId?: string }) {
                 <TabButton active={tab === 'automacoes'} onClick={() => setTab('automacoes')}>
                   Automações
                 </TabButton>
+                <TabButton active={tab === 'conversas'} onClick={() => setTab('conversas')}>
+                  Conversas
+                </TabButton>
               </div>
 
               <div className="min-h-0 flex-1 overflow-hidden p-4">
@@ -2459,12 +2463,16 @@ export default function DealCockpitClient({ dealId }: { dealId?: string }) {
                       )}
                     </div>
                   </div>
-                ) : (
+                ) : tab === 'automacoes' ? (
                   <div className="h-full min-h-0 rounded-2xl border border-white/10 bg-white/2 p-4 overflow-auto">
                     <div className="flex items-center gap-2 text-xs font-semibold text-slate-300 mb-4">
                       <Bot className="h-4 w-4" /> Histórico de Automações
                     </div>
                     <AutomationHistoryPanel dealId={deal.id} />
+                  </div>
+                ) : (
+                  <div className="flex flex-col min-h-0 h-full rounded-2xl border border-white/10 bg-white/2 overflow-hidden">
+                    <DealConversationsTab dealId={deal.id} contactId={contact?.id} />
                   </div>
                 )}
               </div>
