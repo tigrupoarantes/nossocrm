@@ -59,9 +59,9 @@ export function useCRMAgent(_options: UseCRMAgentOptions = {}) {
           context: {
             boardId: activeBoard?.id,
             boardName: activeBoard?.name,
-            stages: activeBoard?.stages?.map((s: { id: string; name: string }) => ({
+            stages: activeBoard?.stages?.map((s) => ({
               id: s.id,
-              name: s.name,
+              name: s.label,
             })),
           },
         }),
