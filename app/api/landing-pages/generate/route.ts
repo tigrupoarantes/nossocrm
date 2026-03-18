@@ -41,7 +41,8 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => null);
     const parsed = GenerateSchema.safeParse(body);
     if (!parsed.success) {
-      return json({ error: parsed.error.errors[0].message }, 400);
+      const issue = parsed.error.issues?.[0] ?? parsed.error;
+      return json({ error: (issue as { message?: string }).message ?? 'Payload inválido.' }, 400);
     }
 
     const { prompt, orgName, webhookUrl, apiKey, formFields, thankYouMessage, thankYouRedirectUrl } = parsed.data;
