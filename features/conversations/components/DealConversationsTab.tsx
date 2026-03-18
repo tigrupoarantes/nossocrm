@@ -54,7 +54,7 @@ export function DealConversationsTab({ dealId }: DealConversationsTabProps) {
   } = useDealConversationsController(dealId);
 
   return (
-    <div className="flex flex-col h-full min-h-0">
+    <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
       {/* Filtros por conversa/canal (quando há múltiplas conversas) */}
       {conversations.length > 1 && (
         <div className="flex items-center gap-2 px-4 py-2 border-b border-slate-200 dark:border-white/10 overflow-x-auto">
@@ -89,19 +89,21 @@ export function DealConversationsTab({ dealId }: DealConversationsTabProps) {
         </div>
       )}
 
-      {/* Área de mensagens */}
-      <div className="flex flex-col flex-1 min-h-0">
+      {/* Área de mensagens — flex-1 garante que o input fique sempre visível */}
+      <div className="flex flex-col flex-1 overflow-hidden">
         {!hasConversations && !isLoading ? (
           <NoConversations />
         ) : (
           <ConversationThread messages={visibleMessages} loading={isLoading} />
         )}
-        <MessageInput
-          onSend={handleSend}
-          availableChannels={availableChannels.length > 0 ? availableChannels : ['whatsapp']}
-          defaultChannel={defaultChannel}
-          isSending={isSending}
-        />
+        <div className="shrink-0">
+          <MessageInput
+            onSend={handleSend}
+            availableChannels={availableChannels.length > 0 ? availableChannels : ['whatsapp']}
+            defaultChannel={defaultChannel}
+            isSending={isSending}
+          />
+        </div>
       </div>
     </div>
   );

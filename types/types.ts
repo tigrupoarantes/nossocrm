@@ -641,3 +641,63 @@ export interface ConnectedChannel {
   createdAt: string;
   updatedAt: string;
 }
+
+// =============================================================================
+// Landing Pages
+// =============================================================================
+
+export type LandingPageStatus = 'draft' | 'published' | 'archived';
+
+export interface LandingPageField {
+  name: string;
+  label: string;
+  type: 'text' | 'email' | 'tel' | 'textarea' | 'select';
+  required: boolean;
+  placeholder?: string;
+  options?: string[];
+}
+
+export interface LandingPage {
+  id: string;
+  organizationId: string;
+  title: string;
+  slug: string;
+  description: string | null;
+  htmlContent: string;
+  promptUsed: string | null;
+  aiModel: string | null;
+  targetBoardId: string | null;
+  targetStageId: string | null;
+  webhookApiKey: string;
+  customFields: LandingPageField[];
+  thankYouMessage: string;
+  thankYouRedirectUrl: string | null;
+  metaTitle: string | null;
+  metaDescription: string | null;
+  ogImageUrl: string | null;
+  googleAnalyticsId: string | null;
+  metaPixelId: string | null;
+  status: LandingPageStatus;
+  publishedAt: string | null;
+  viewsCount: number;
+  submissionsCount: number;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string | null;
+}
+
+export interface LandingPageSubmission {
+  id: string;
+  organizationId: string;
+  landingPageId: string;
+  contactId: string | null;
+  dealId: string | null;
+  formData: Record<string, string>;
+  ipAddress: string | null;
+  utmSource: string | null;
+  utmMedium: string | null;
+  utmCampaign: string | null;
+  utmTerm: string | null;
+  utmContent: string | null;
+  createdAt: string;
+}

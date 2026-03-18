@@ -2471,7 +2471,7 @@ export default function DealCockpitClient({ dealId }: { dealId?: string }) {
                     <AutomationHistoryPanel dealId={deal.id} />
                   </div>
                 ) : (
-                  <div className="h-full min-h-0 rounded-2xl border border-white/10 bg-white/2 overflow-hidden">
+                  <div className="flex flex-col min-h-0 h-full rounded-2xl border border-white/10 bg-white/2 overflow-hidden">
                     <DealConversationsTab dealId={deal.id} contactId={contact?.id} />
                   </div>
                 )}

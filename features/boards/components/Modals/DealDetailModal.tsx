@@ -807,7 +807,7 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                 </div>
               </div>
 
-              <div className={`flex-1 min-h-0 bg-slate-50/30 dark:bg-black/10 ${activeTab === 'conversations' ? 'overflow-hidden' : 'overflow-y-auto p-6'}`}>
+              <div className={`bg-slate-50/30 dark:bg-black/10 ${activeTab === 'conversations' ? 'flex-1 min-h-0 flex flex-col overflow-hidden' : 'flex-1 overflow-y-auto p-6'}`}>
                 {activeTab === 'timeline' && (
                   <div className="space-y-6">
                     <div className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl p-4 shadow-sm">
