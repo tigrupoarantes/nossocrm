@@ -3,7 +3,7 @@
  * Gera HTML completo de uma landing page usando IA.
  */
 
-import { generateText } from 'ai';
+import { streamText } from 'ai';
 import { z } from 'zod';
 import { requireAITaskContext, AITaskHttpError } from '@/lib/ai/tasks/server';
 import { buildLandingPagePrompt } from '@/features/landing-pages/lib/page-generator';
@@ -57,19 +57,13 @@ export async function POST(req: Request) {
       thankYouRedirectUrl,
     });
 
-    const result = await generateText({
+    const result = streamText({
       model,
       maxRetries: 2,
       prompt: fullPrompt,
     });
 
-    // Garantir que retornou HTML válido
-    const html = result.text.trim();
-    if (!html.includes('<html') && !html.includes('<!DOCTYPE')) {
-      return json({ error: 'A IA não retornou um HTML válido. Tente novamente com uma descrição mais detalhada.' }, 500);
-    }
-
-    return json({ html, model: result.response?.modelId ?? 'unknown' });
+    return result.toTextStreamResponse();
   } catch (err) {
     if (err instanceof AITaskHttpError) return err.toResponse();
     if (err instanceof z.ZodError) {

@@ -88,6 +88,7 @@ export function LandingPageBuilder({ landingPageId }: LandingPageBuilderProps) {
       webhookUrl: `${typeof window !== 'undefined' ? window.location.origin : ''}/api/p/${slug}/submit`,
       apiKey: resolvedApiKey,
       formFields: [] as LandingPageField[],
+      onChunk: (partial) => setHtmlContent(partial),
     });
 
     setHtmlContent(result.html);
