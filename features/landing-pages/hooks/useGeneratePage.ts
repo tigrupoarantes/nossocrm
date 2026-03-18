@@ -29,7 +29,10 @@ export function useGeneratePage() {
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.error ?? 'Erro ao gerar landing page. Tente novamente.');
+        const errMsg = typeof err.error === 'string'
+          ? err.error
+          : (err.error?.message ?? 'Erro ao gerar landing page. Tente novamente.');
+        throw new Error(errMsg);
       }
 
       return res.json();

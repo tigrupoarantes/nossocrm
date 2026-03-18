@@ -9,7 +9,7 @@ import { generateSlug } from '../lib/slug-utils';
 import { LivePreview } from './LivePreview';
 import { PublishDialog } from './PublishDialog';
 import { SubmissionsList } from './SubmissionsList';
-import type { LandingPageField } from '@/types';
+import type { LandingPage, LandingPageField } from '@/types';
 
 interface LandingPageBuilderProps {
   landingPageId?: string;
@@ -35,6 +35,7 @@ export function LandingPageBuilder({ landingPageId }: LandingPageBuilderProps) {
   const [showPublishDialog, setShowPublishDialog] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>('builder');
   const [savedId, setSavedId] = useState<string | null>(landingPageId ?? null);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   // Preencher estado ao carregar LP existente
   useEffect(() => {
@@ -63,23 +64,29 @@ export function LandingPageBuilder({ landingPageId }: LandingPageBuilderProps) {
       return;
     }
 
-    // Salvar rascunho primeiro se for nova
+    setCreateError(null);
+
+    // Salvar rascunho primeiro se for nova LP
     let currentId = savedId;
+    let createdLP: LandingPage | null = null;
     if (isNew && !currentId) {
       try {
-        const created = await createMutation.mutateAsync({ title, slug });
-        currentId = created.id;
-        setSavedId(created.id);
-      } catch {
+        createdLP = await createMutation.mutateAsync({ title, slug });
+        currentId = createdLP.id;
+        setSavedId(createdLP.id);
+      } catch (e) {
+        setCreateError((e as Error).message ?? 'Erro ao criar landing page.');
         return;
       }
     }
+
+    const resolvedApiKey = createdLP?.webhookApiKey ?? existingLP?.webhookApiKey ?? 'key';
 
     const result = await generateMutation.mutateAsync({
       prompt,
       orgName: title,
       webhookUrl: `${typeof window !== 'undefined' ? window.location.origin : ''}/api/p/${slug}/submit`,
-      apiKey: existingLP?.webhookApiKey ?? 'key',
+      apiKey: resolvedApiKey,
       formFields: [] as LandingPageField[],
     });
 
@@ -229,6 +236,12 @@ export function LandingPageBuilder({ landingPageId }: LandingPageBuilderProps) {
                 <><Sparkles size={16} />Gerar com IA</>
               )}
             </button>
+
+            {createError && (
+              <p className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 rounded-xl px-3 py-2">
+                {createError}
+              </p>
+            )}
 
             {generateMutation.error && (
               <p className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 rounded-xl px-3 py-2">
