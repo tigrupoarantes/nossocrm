@@ -37,90 +37,22 @@ const AI_PROVIDERS = [
     },
 ] as const;
 
-// Função para validar API key fazendo uma chamada real à API
+// Valida a API key via rota server-side (evita CORS — Anthropic/OpenAI bloqueiam chamadas do browser)
 async function validateApiKey(provider: string, apiKey: string, model: string): Promise<{ valid: boolean; error?: string }> {
     if (!apiKey || apiKey.trim().length < 10) {
         return { valid: false, error: 'Chave muito curta' };
     }
 
     try {
-        if (provider === 'google') {
-            // Gemini API validation - usa endpoint generateContent com texto mínimo
-            const response = await fetch(
-                `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        contents: [{ parts: [{ text: 'Hi' }] }],
-                        generationConfig: { maxOutputTokens: 1 }
-                    })
-                }
-            );
+        const res = await fetch('/api/settings/ai/validate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ provider, apiKey, model }),
+        });
 
-            if (response.ok) {
-                return { valid: true };
-            }
-
-            const error = await response.json();
-            if (response.status === 400 && error?.error?.message?.includes('API key not valid')) {
-                return { valid: false, error: 'Chave de API inválida' };
-            }
-            if (response.status === 403) {
-                return { valid: false, error: 'Chave sem permissão para este modelo' };
-            }
-            if (response.status === 429) {
-                // Rate limit = key é válida, só está no limite
-                return { valid: true };
-            }
-            return { valid: false, error: error?.error?.message || 'Erro desconhecido' };
-
-        } else if (provider === 'openai') {
-            // OpenAI validation
-            const response = await fetch('https://api.openai.com/v1/models', {
-                headers: { 'Authorization': `Bearer ${apiKey}` }
-            });
-
-            if (response.ok) {
-                return { valid: true };
-            }
-            if (response.status === 401) {
-                return { valid: false, error: 'Chave de API inválida' };
-            }
-            return { valid: false, error: 'Erro ao validar chave' };
-
-        } else if (provider === 'anthropic') {
-            // Anthropic validation - não tem endpoint de validação simples
-            // Fazemos uma chamada mínima
-            const response = await fetch('https://api.anthropic.com/v1/messages', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-api-key': apiKey,
-                    'anthropic-version': '2023-06-01'
-                },
-                body: JSON.stringify({
-                    model: model,
-                    max_tokens: 1,
-                    messages: [{ role: 'user', content: 'Hi' }]
-                })
-            });
-
-            if (response.ok) {
-                return { valid: true };
-            }
-            if (response.status === 401) {
-                return { valid: false, error: 'Chave de API inválida' };
-            }
-            if (response.status === 429) {
-                return { valid: true }; // Rate limit = key válida
-            }
-            return { valid: false, error: 'Erro ao validar chave' };
-        }
-
-        return { valid: false, error: 'Provedor não suportado' };
-    } catch (error) {
-        console.error('API Key validation error:', error);
+        const data = await res.json().catch(() => ({ valid: false, error: 'Erro ao validar' }));
+        return data as { valid: boolean; error?: string };
+    } catch {
         return { valid: false, error: 'Erro de conexão. Verifique sua internet.' };
     }
 }
