@@ -77,6 +77,7 @@ export async function POST(req: Request) {
       return json({ error: (issue as { message?: string }).message ?? 'Payload inválido.' }, 400);
     }
     console.error('[api/landing-pages/generate]', err);
-    return json({ error: 'Erro ao gerar landing page. Tente novamente.' }, 500);
+    const message = err instanceof Error ? err.message : 'Erro ao gerar landing page. Tente novamente.';
+    return json({ error: message }, 500);
   }
 }
