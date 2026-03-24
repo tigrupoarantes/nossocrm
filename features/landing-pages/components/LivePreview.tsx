@@ -142,7 +142,6 @@ export function LivePreview({ html, mode, onModeChange, isGenerating = false, on
         >
           <iframe
             ref={iframeRef}
-            srcDoc={html || EMPTY_PREVIEW}
             className="w-full"
             style={{ height: 700, border: 'none' }}
             sandbox="allow-scripts allow-forms allow-same-origin"
