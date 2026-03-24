@@ -1,6 +1,18 @@
 import type { NextConfig } from "next";
+import { execSync } from "child_process";
+
+function getBuildId(): string {
+  try {
+    return execSync("git rev-parse --short HEAD", { encoding: "utf8" }).trim();
+  } catch {
+    return "dev";
+  }
+}
 
 const nextConfig: NextConfig = {
+  env: {
+    NEXT_PUBLIC_BUILD_ID: getBuildId(),
+  },
   // Otimiza imports de bibliotecas com barrel files (index.js que re-exporta tudo)
   // Isso evita carregar módulos não utilizados, reduzindo o bundle em 15-25KB
   // Ref: https://vercel.com/blog/how-we-optimized-package-imports-in-next-js

@@ -323,6 +323,14 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           </div>
         )}
 
+        {!sidebarCollapsed && (
+          <div className="px-5 pb-1">
+            <span className="text-[10px] font-mono text-slate-400/50 dark:text-white/20 select-none">
+              {process.env.NEXT_PUBLIC_BUILD_ID ?? 'dev'}
+            </span>
+          </div>
+        )}
+
         <div className={`p-4 border-t border-[var(--color-border-subtle)] ${sidebarCollapsed ? 'flex justify-center' : ''}`}>
           <div className="relative">
             {/* User Card - Clickable */}
