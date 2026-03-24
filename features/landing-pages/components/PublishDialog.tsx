@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Globe, Copy, Check, Loader2, ExternalLink } from 'lucide-react';
-import { usePublishLandingPage } from '../hooks/useLandingPages';
+import { Globe, Copy, Check, Loader2, ExternalLink, AlertCircle } from 'lucide-react';
+import { usePublishLandingPage, useUpdateLandingPage } from '../hooks/useLandingPages';
 
 interface PublishDialogProps {
   landingPageId: string;
@@ -11,16 +11,39 @@ interface PublishDialogProps {
   onClose: () => void;
 }
 
+const SLUG_REGEX = /^[a-z0-9-]+$/;
+
 export function PublishDialog({ landingPageId, slug, status, onClose }: PublishDialogProps) {
   const publishMutation = usePublishLandingPage(landingPageId);
+  const updateMutation = useUpdateLandingPage();
   const [copied, setCopied] = useState(false);
+  const [slugInput, setSlugInput] = useState(slug);
+  const [slugError, setSlugError] = useState<string | null>(null);
 
   const lpBaseUrl = process.env.NEXT_PUBLIC_LP_BASE_URL ?? '/p';
-  const publicUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}${lpBaseUrl}/${slug}`;
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const publicUrl = `${origin}${lpBaseUrl}/${slugInput || slug}`;
 
   const isPublished = status === 'published';
+  const slugChanged = slugInput !== slug;
+  const slugInvalid = slugInput.length > 0 && !SLUG_REGEX.test(slugInput);
 
   async function handlePublish() {
+    setSlugError(null);
+    // Se o slug mudou, salva primeiro
+    if (slugChanged && !slugInvalid && slugInput) {
+      try {
+        await updateMutation.mutateAsync({ id: landingPageId, slug: slugInput });
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : '';
+        if (msg.includes('Slug') || msg.includes('409') || msg.includes('já existe')) {
+          setSlugError('Este endereço já está em uso. Escolha outro.');
+        } else {
+          setSlugError(msg || 'Erro ao salvar endereço.');
+        }
+        return;
+      }
+    }
     await publishMutation.mutateAsync();
   }
 
@@ -29,6 +52,8 @@ export function PublishDialog({ landingPageId, slug, status, onClose }: PublishD
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
+
+  const isPending = updateMutation.isPending || publishMutation.isPending;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -48,24 +73,69 @@ export function PublishDialog({ landingPageId, slug, status, onClose }: PublishD
           </div>
         </div>
 
-        {/* URL pública */}
+        {/* Endereço público */}
         <div className="space-y-2">
-          <label className="text-xs font-medium text-slate-500 dark:text-slate-400">URL Pública</label>
-          <div className="flex items-center gap-2 bg-slate-50 dark:bg-white/5 rounded-xl px-3 py-2.5 border border-slate-200 dark:border-white/10">
-            <span className="flex-1 text-sm text-slate-700 dark:text-slate-300 truncate font-mono">{publicUrl}</span>
-            <button
-              onClick={handleCopy}
-              className="shrink-0 p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors"
-              title="Copiar URL"
-            >
-              {copied ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
-            </button>
-            {isPublished && (
-              <a href={publicUrl} target="_blank" rel="noopener noreferrer" className="shrink-0 p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors">
-                <ExternalLink size={14} />
-              </a>
+          <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
+            Endereço público
+          </label>
+          <div className={`flex items-center bg-slate-50 dark:bg-white/5 rounded-xl border transition-colors overflow-hidden ${
+            slugInvalid
+              ? 'border-red-400 dark:border-red-500'
+              : 'border-slate-200 dark:border-white/10 focus-within:border-primary-400'
+          }`}>
+            {/* Parte fixa */}
+            <span className="pl-3 py-2.5 text-sm text-slate-400 dark:text-slate-500 whitespace-nowrap font-mono shrink-0">
+              {origin}{lpBaseUrl}/
+            </span>
+            {/* Slug editável */}
+            {isPublished ? (
+              <span className="flex-1 py-2.5 text-sm text-slate-700 dark:text-slate-300 font-mono truncate">
+                {slug}
+              </span>
+            ) : (
+              <input
+                type="text"
+                value={slugInput}
+                onChange={e => {
+                  setSlugInput(e.target.value.toLowerCase().replace(/\s+/g, '-'));
+                  setSlugError(null);
+                }}
+                className="flex-1 py-2.5 text-sm text-slate-700 dark:text-slate-300 font-mono bg-transparent focus:outline-none min-w-0"
+                placeholder="meu-slug"
+                spellCheck={false}
+              />
             )}
+            {/* Ações */}
+            <div className="flex items-center gap-0.5 pr-2 shrink-0">
+              <button
+                onClick={handleCopy}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors"
+                title="Copiar URL"
+              >
+                {copied ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
+              </button>
+              {isPublished && (
+                <a href={publicUrl} target="_blank" rel="noopener noreferrer" className="p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors">
+                  <ExternalLink size={14} />
+                </a>
+              )}
+            </div>
           </div>
+
+          {/* Aviso de slug inválido */}
+          {slugInvalid && (
+            <p className="text-xs text-red-500 flex items-center gap-1">
+              <AlertCircle size={11} />
+              Apenas letras minúsculas, números e hífens
+            </p>
+          )}
+          {/* Erro de slug duplicado */}
+          {slugError && (
+            <p className="text-xs text-red-500 flex items-center gap-1">
+              <AlertCircle size={11} />
+              {slugError}
+            </p>
+          )}
         </div>
 
         {/* Botões */}
@@ -79,10 +149,10 @@ export function PublishDialog({ landingPageId, slug, status, onClose }: PublishD
           {!isPublished && (
             <button
               onClick={handlePublish}
-              disabled={publishMutation.isPending}
+              disabled={isPending || slugInvalid || !slugInput}
               className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white text-sm font-medium transition-colors"
             >
-              {publishMutation.isPending ? (
+              {isPending ? (
                 <><Loader2 size={14} className="animate-spin" />Publicando...</>
               ) : (
                 <><Globe size={14} />Publicar agora</>
