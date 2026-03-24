@@ -13,7 +13,7 @@ const STATUS_LABELS: Record<LandingPageStatus, { label: string; color: string }>
 };
 
 // Card interno — instancia hooks por LP para mutations individuais
-function LandingPageCard({ lp, lpBaseUrl }: { lp: Partial<LandingPage>; lpBaseUrl: string }) {
+function LandingPageCard({ lp, lpBaseUrl }: { lp: LandingPage; lpBaseUrl: string }) {
   const deleteMutation = useDeleteLandingPage();
   const unpublishMutation = useUnpublishLandingPage(lp.id!);
 
@@ -169,7 +169,7 @@ export function LandingPagesList() {
       {/* Grid de cards */}
       {pages.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {pages.map((lp) => (
+          {pages.map((lp: LandingPage) => (
             <LandingPageCard key={lp.id} lp={lp} lpBaseUrl={lpBaseUrl} />
           ))}
         </div>

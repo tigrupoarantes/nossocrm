@@ -1,7 +1,42 @@
 'use client';
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import type { LandingPage, LandingPageStatus } from '@/types';
+import type { LandingPage, LandingPageField, LandingPageStatus } from '@/types';
+
+// =============================================================================
+// Mapper: converte row do Supabase (snake_case) → LandingPage (camelCase)
+// =============================================================================
+
+function mapLandingPage(raw: Record<string, unknown>): LandingPage {
+  return {
+    id: raw.id as string,
+    organizationId: raw.organization_id as string,
+    title: raw.title as string,
+    slug: raw.slug as string,
+    description: raw.description as string | null,
+    htmlContent: (raw.html_content ?? '') as string,
+    promptUsed: raw.prompt_used as string | null,
+    aiModel: raw.ai_model as string | null,
+    targetBoardId: raw.target_board_id as string | null,
+    targetStageId: raw.target_stage_id as string | null,
+    webhookApiKey: (raw.webhook_api_key ?? '') as string,
+    customFields: (raw.custom_fields ?? []) as LandingPageField[],
+    thankYouMessage: (raw.thank_you_message ?? '') as string,
+    thankYouRedirectUrl: raw.thank_you_redirect_url as string | null,
+    metaTitle: raw.meta_title as string | null,
+    metaDescription: raw.meta_description as string | null,
+    ogImageUrl: raw.og_image_url as string | null,
+    googleAnalyticsId: raw.google_analytics_id as string | null,
+    metaPixelId: raw.meta_pixel_id as string | null,
+    status: raw.status as LandingPageStatus,
+    publishedAt: raw.published_at as string | null,
+    viewsCount: (raw.views_count ?? 0) as number,
+    submissionsCount: (raw.submissions_count ?? 0) as number,
+    createdAt: raw.created_at as string,
+    updatedAt: raw.updated_at as string,
+    createdBy: raw.created_by as string | null,
+  };
+}
 
 // =============================================================================
 // Query Keys
@@ -27,7 +62,10 @@ export function useLandingPages(status?: LandingPageStatus) {
       const res = await fetch(url);
       if (!res.ok) throw new Error('Erro ao buscar landing pages');
       const json = await res.json();
-      return json as { data: Partial<LandingPage>[]; totalCount: number };
+      return {
+        data: (json.data as Record<string, unknown>[]).map(mapLandingPage),
+        totalCount: json.totalCount as number,
+      };
     },
   });
 }
@@ -43,7 +81,7 @@ export function useLandingPage(id: string | null) {
       const res = await fetch(`/api/landing-pages/${id}`);
       if (!res.ok) throw new Error('Erro ao buscar landing page');
       const json = await res.json();
-      return json.data as LandingPage;
+      return mapLandingPage(json.data as Record<string, unknown>);
     },
     enabled: !!id,
   });
@@ -66,7 +104,8 @@ export function useCreateLandingPage() {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error ?? 'Erro ao criar landing page');
       }
-      return (await res.json()).data as LandingPage;
+      const json = await res.json();
+      return mapLandingPage(json.data as Record<string, unknown>);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: landingPageKeys.lists() });
@@ -91,7 +130,8 @@ export function useUpdateLandingPage() {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error ?? 'Erro ao salvar landing page');
       }
-      return (await res.json()).data as LandingPage;
+      const json = await res.json();
+      return mapLandingPage(json.data as Record<string, unknown>);
     },
     onSuccess: (data, variables) => {
       queryClient.setQueryData(landingPageKeys.detail(variables.id), data);
