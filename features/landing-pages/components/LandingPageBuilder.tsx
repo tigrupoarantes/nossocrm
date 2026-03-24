@@ -284,7 +284,7 @@ export function LandingPageBuilder({ landingPageId }: LandingPageBuilderProps) {
 
           {/* Coluna direita: preview */}
           <div className="flex-1 min-h-0 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl overflow-hidden">
-            <LivePreview html={htmlContent} mode={previewMode} onModeChange={setPreviewMode} />
+            <LivePreview html={htmlContent} mode={previewMode} onModeChange={setPreviewMode} isGenerating={isGenerating} />
           </div>
         </div>
       )}

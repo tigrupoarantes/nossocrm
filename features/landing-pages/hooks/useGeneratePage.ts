@@ -58,7 +58,13 @@ export function useGeneratePage() {
           throw new Error('A IA não retornou conteúdo. Tente novamente.');
         }
 
-        return { html: fullText.trim(), model: 'stream' };
+        // Strip markdown code fences se o modelo insistir em adicioná-los
+        const cleaned = fullText.trim()
+          .replace(/^```(?:html)?\s*/i, '')
+          .replace(/\s*```\s*$/, '')
+          .trim();
+
+        return { html: cleaned, model: 'stream' };
       } finally {
         clearTimeout(timeout);
       }

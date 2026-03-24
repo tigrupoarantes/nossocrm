@@ -7,9 +7,10 @@ interface LivePreviewProps {
   html: string;
   mode: 'desktop' | 'mobile';
   onModeChange: (mode: 'desktop' | 'mobile') => void;
+  isGenerating?: boolean;
 }
 
-export function LivePreview({ html, mode, onModeChange }: LivePreviewProps) {
+export function LivePreview({ html, mode, onModeChange, isGenerating = false }: LivePreviewProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   // Atualiza o srcdoc quando o html mudar
@@ -51,7 +52,7 @@ export function LivePreview({ html, mode, onModeChange }: LivePreviewProps) {
       {/* Iframe container */}
       <div className="flex-1 overflow-auto bg-slate-100 dark:bg-slate-900 flex items-start justify-center p-4">
         <div
-          className={`bg-white shadow-xl rounded-lg overflow-hidden transition-all duration-300 ${mode === 'mobile' ? 'w-[390px]' : 'w-full max-w-5xl'
+          className={`relative bg-white shadow-xl rounded-lg overflow-hidden transition-all duration-300 ${mode === 'mobile' ? 'w-[390px]' : 'w-full max-w-5xl'
             }`}
           style={{ minHeight: 600 }}
         >
@@ -63,6 +64,13 @@ export function LivePreview({ html, mode, onModeChange }: LivePreviewProps) {
             sandbox="allow-scripts allow-forms allow-same-origin"
             title="Preview da Landing Page"
           />
+          {isGenerating && (
+            <div className="absolute inset-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm flex flex-col items-center justify-center gap-3">
+              <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+              <p className="text-sm font-medium text-slate-600 dark:text-slate-300">Gerando HTML com IA...</p>
+              <p className="text-xs text-slate-400">Pode levar até 1 minuto</p>
+            </div>
+          )}
         </div>
       </div>
     </div>
