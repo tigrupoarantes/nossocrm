@@ -59,7 +59,7 @@ export async function POST(req: Request) {
 
     const result = streamText({
       model,
-      maxRetries: 2,
+      maxRetries: 0,
       prompt: fullPrompt,
     });
 
