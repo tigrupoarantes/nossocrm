@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft, Globe, Save, Loader2, Send, Sparkles,
-  BarChart3, CheckCircle2, AlertCircle,
+  BarChart3, CheckCircle2, AlertCircle, Target,
 } from 'lucide-react';
 import { useLandingPage, useCreateLandingPage, useUpdateLandingPage } from '../hooks/useLandingPages';
 import { useGeneratePage } from '../hooks/useGeneratePage';
@@ -12,6 +12,7 @@ import { generateSlug } from '../lib/slug-utils';
 import { LivePreview } from './LivePreview';
 import { PublishDialog } from './PublishDialog';
 import { SubmissionsList } from './SubmissionsList';
+import { useBoards } from '@/lib/query/hooks/useBoardsQuery';
 import type { LandingPage } from '@/types';
 
 // ---------------------------------------------------------------------------
@@ -50,6 +51,7 @@ export function LandingPageBuilder({ landingPageId }: LandingPageBuilderProps) {
   const createMutation = useCreateLandingPage();
   const updateMutation = useUpdateLandingPage();
   const generateMutation = useGeneratePage();
+  const { data: boards } = useBoards();
 
   // Core state
   const [title, setTitle] = useState('');
@@ -62,6 +64,10 @@ export function LandingPageBuilder({ landingPageId }: LandingPageBuilderProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [createError, setCreateError] = useState<string | null>(null);
+
+  // Destino dos leads
+  const [targetBoardId, setTargetBoardId] = useState('');
+  const [targetStageId, setTargetStageId] = useState('');
 
   // UI state
   const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>('desktop');
@@ -76,6 +82,8 @@ export function LandingPageBuilder({ landingPageId }: LandingPageBuilderProps) {
     setTitle(existingLP.title ?? '');
     setSlug(existingLP.slug ?? '');
     setHtmlContent(existingLP.htmlContent ?? '');
+    setTargetBoardId(existingLP.targetBoardId ?? '');
+    setTargetStageId(existingLP.targetStageId ?? '');
     if (existingLP.promptUsed && messages.length === 0) {
       setMessages([
         { id: 'init-user', role: 'user', text: existingLP.promptUsed, status: 'done' },
@@ -107,6 +115,27 @@ export function LandingPageBuilder({ landingPageId }: LandingPageBuilderProps) {
   const currentStatus = existingLP?.status ?? 'draft';
   const currentId = savedId ?? landingPageId;
   const isRefinement = !!htmlContent && messages.length > 0;
+
+  // Destino dos leads — derivações
+  const selectedBoard = boards?.find(b => b.id === targetBoardId) ?? null;
+  const availableStages = selectedBoard?.stages ?? [];
+
+  async function handleBoardChange(boardId: string) {
+    setTargetBoardId(boardId);
+    setTargetStageId('');
+    const id = savedId ?? landingPageId;
+    if (id) {
+      await updateMutation.mutateAsync({ id, targetBoardId: boardId, targetStageId: null });
+    }
+  }
+
+  async function handleStageChange(stageId: string) {
+    setTargetStageId(stageId);
+    const id = savedId ?? landingPageId;
+    if (id) {
+      await updateMutation.mutateAsync({ id, targetBoardId, targetStageId: stageId });
+    }
+  }
 
   // HTML que o preview deve exibir.
   // Usa liveHtml (chunks ao vivo) quando disponível, depois cai para htmlContent.
@@ -142,7 +171,11 @@ export function LandingPageBuilder({ landingPageId }: LandingPageBuilderProps) {
     let createdLP: LandingPage | null = null;
     if (isNew && !resolvedId) {
       try {
-        createdLP = await createMutation.mutateAsync({ title: lpTitle, slug: lpSlug });
+        createdLP = await createMutation.mutateAsync({
+          title: lpTitle, slug: lpSlug,
+          targetBoardId: targetBoardId || undefined,
+          targetStageId: targetStageId || undefined,
+        });
         resolvedId = createdLP.id;
         setSavedId(createdLP.id);
       } catch (e) {
@@ -383,6 +416,40 @@ export function LandingPageBuilder({ landingPageId }: LandingPageBuilderProps) {
               </p>
             )}
 
+            {/* Destino dos leads */}
+            <div className="shrink-0 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-3 space-y-2">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
+                <Target size={12} />
+                Destino dos Leads
+              </div>
+              <select
+                value={targetBoardId}
+                onChange={(e) => handleBoardChange(e.target.value)}
+                className="w-full text-xs px-2.5 py-1.5 rounded-lg bg-white dark:bg-white/10 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              >
+                <option value="">Selecione o funil (board)...</option>
+                {(boards ?? []).map(b => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+              <select
+                value={targetStageId}
+                onChange={(e) => handleStageChange(e.target.value)}
+                disabled={!targetBoardId}
+                className="w-full text-xs px-2.5 py-1.5 rounded-lg bg-white dark:bg-white/10 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:opacity-40"
+              >
+                <option value="">Selecione o estágio...</option>
+                {availableStages.map(s => (
+                  <option key={s.id} value={s.id}>{s.label}</option>
+                ))}
+              </select>
+              {targetBoardId && targetStageId && selectedBoard && (
+                <p className="text-xs text-primary-600 dark:text-primary-400 font-medium truncate">
+                  ✓ Leads → {selectedBoard.name} › {availableStages.find(s => s.id === targetStageId)?.label}
+                </p>
+              )}
+            </div>
+
             {/* Input de prompt */}
             <div className="shrink-0 relative">
               <textarea
@@ -418,6 +485,10 @@ export function LandingPageBuilder({ landingPageId }: LandingPageBuilderProps) {
               mode={previewMode}
               onModeChange={setPreviewMode}
               isGenerating={isGenerating && !liveHtml && !htmlContent}
+              onHtmlEdit={(newHtml) => {
+                setHtmlContent(newHtml);
+                setLiveHtml(newHtml);
+              }}
             />
           </div>
         </div>

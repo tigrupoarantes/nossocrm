@@ -140,6 +140,28 @@ export function useDeleteLandingPage() {
 }
 
 // =============================================================================
+// Unpublish
+// =============================================================================
+
+export function useUnpublishLandingPage(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/landing-pages/${id}/unpublish`, { method: 'POST' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? 'Erro ao despublicar landing page');
+      }
+      return (await res.json()).data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: landingPageKeys.detail(id) });
+      queryClient.invalidateQueries({ queryKey: landingPageKeys.lists() });
+    },
+  });
+}
+
+// =============================================================================
 // Submissions
 // =============================================================================
 

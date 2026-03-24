@@ -105,7 +105,7 @@ export async function DELETE(
 
   const { error } = await supabase
     .from('landing_pages')
-    .update({ status: 'archived' })
+    .delete()
     .eq('id', id)
     .eq('organization_id', profile.organization_id);
 
