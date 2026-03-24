@@ -77,6 +77,10 @@ export async function POST(
   const email: string = formData.email || '';
   const phone: string = formData.phone || formData.telefone || formData.whatsapp || '';
 
+  console.log('[submit] LP found:', { id: lp.id, org: lp.organization_id, board: lp.target_board_id, stage: lp.target_stage_id });
+  console.log('[submit] formData:', formData);
+  console.log('[submit] extracted:', { name, email, phone });
+
   // 4. Criar ou atualizar contato
   let contactId: string | null = null;
 
@@ -107,8 +111,9 @@ export async function POST(
 
     if (existingId) {
       contactId = existingId;
+      console.log('[submit] contact found existing:', contactId);
     } else {
-      const { data: newContact } = await supabase
+      const { data: newContact, error: contactError } = await supabase
         .from('contacts')
         .insert({
           organization_id: lp.organization_id,
@@ -119,7 +124,9 @@ export async function POST(
         })
         .select('id')
         .single();
+      if (contactError) console.error('[submit] contact insert error:', contactError.message, contactError.code);
       contactId = newContact?.id ?? null;
+      console.log('[submit] contact created:', contactId);
     }
   }
 
@@ -159,7 +166,7 @@ export async function POST(
 
   // 6. Registrar submissão
   const url = new URL(request.url);
-  await supabase.from('landing_page_submissions').insert({
+  const { error: submissionError } = await supabase.from('landing_page_submissions').insert({
     organization_id: lp.organization_id,
     landing_page_id: lp.id,
     contact_id: contactId,
@@ -173,6 +180,8 @@ export async function POST(
     referrer: request.headers.get('referer') ?? null,
     user_agent: request.headers.get('user-agent') ?? null,
   });
+  if (submissionError) console.error('[submit] submission insert error:', submissionError.message, submissionError.code);
+  else console.log('[submit] submission recorded OK, dealId:', dealId, 'contactId:', contactId);
 
   return json({
     ok: true,
