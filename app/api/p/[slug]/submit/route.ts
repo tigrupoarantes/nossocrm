@@ -40,27 +40,26 @@ export async function OPTIONS() {
 
 export async function POST(
   request: Request,
-  { params }: { params: Promise<{ slug: string }> }
+  _ctx: { params: Promise<{ slug: string }> }
 ) {
-  const { slug } = await params;
   const supabase = createStaticAdminClient();
 
-  // 1. Buscar LP pelo slug
+  // 1. Validar API key (enviada pelo HTML gerado, única por LP)
+  const apiKey = request.headers.get('x-api-key');
+  if (!apiKey) {
+    return json({ error: 'Unauthorized' }, 401);
+  }
+
+  // 2. Buscar LP pela webhook_api_key — robusto a mudanças de slug pós-geração
   const { data: lp, error: lpError } = await supabase
     .from('landing_pages')
     .select('id, organization_id, webhook_api_key, target_board_id, target_stage_id, title, thank_you_redirect_url, status')
-    .eq('slug', slug)
+    .eq('webhook_api_key', apiKey)
     .eq('status', 'published')
     .single();
 
   if (lpError || !lp) {
     return json({ error: 'Landing page não encontrada.' }, 404);
-  }
-
-  // 2. Validar API key
-  const apiKey = request.headers.get('x-api-key');
-  if (!apiKey || apiKey !== lp.webhook_api_key) {
-    return json({ error: 'Unauthorized' }, 401);
   }
 
   // 3. Parsear body
