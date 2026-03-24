@@ -48,7 +48,7 @@ export function LandingPageBuilder({ landingPageId }: LandingPageBuilderProps) {
 
   const { data: existingLP, isLoading: isLoadingLP } = useLandingPage(landingPageId ?? null);
   const createMutation = useCreateLandingPage();
-  const updateMutation = useUpdateLandingPage(landingPageId ?? '');
+  const updateMutation = useUpdateLandingPage();
   const generateMutation = useGeneratePage();
 
   // Core state
@@ -181,6 +181,7 @@ export function LandingPageBuilder({ landingPageId }: LandingPageBuilderProps) {
 
       if (resolvedId) {
         await updateMutation.mutateAsync({
+          id: resolvedId,
           htmlContent: result.html,
           promptUsed: isRefinement ? undefined : text,
           aiModel: result.model,
@@ -203,7 +204,7 @@ export function LandingPageBuilder({ landingPageId }: LandingPageBuilderProps) {
       setSavedId(created.id);
       router.replace(`/landing-pages/${created.id}`);
     } else {
-      await updateMutation.mutateAsync({ title, slug, htmlContent });
+      await updateMutation.mutateAsync({ id: savedId ?? landingPageId ?? '', title, slug, htmlContent });
     }
   }
 

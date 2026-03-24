@@ -78,10 +78,10 @@ export function useCreateLandingPage() {
 // Update
 // =============================================================================
 
-export function useUpdateLandingPage(id: string) {
+export function useUpdateLandingPage() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: Partial<LandingPage>) => {
+    mutationFn: async ({ id, ...data }: { id: string } & Partial<LandingPage>) => {
       const res = await fetch(`/api/landing-pages/${id}`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
@@ -93,8 +93,8 @@ export function useUpdateLandingPage(id: string) {
       }
       return (await res.json()).data as LandingPage;
     },
-    onSuccess: (data) => {
-      queryClient.setQueryData(landingPageKeys.detail(id), data);
+    onSuccess: (data, variables) => {
+      queryClient.setQueryData(landingPageKeys.detail(variables.id), data);
       queryClient.invalidateQueries({ queryKey: landingPageKeys.lists() });
     },
   });
