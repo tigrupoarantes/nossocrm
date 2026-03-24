@@ -141,7 +141,7 @@ export async function POST(
     }
 
     if (stageId) {
-      const { data: newDeal } = await supabase
+      const { data: newDeal, error: dealError } = await supabase
         .from('deals')
         .insert({
           organization_id: lp.organization_id,
@@ -149,10 +149,10 @@ export async function POST(
           contact_id: contactId,
           board_id: lp.target_board_id,
           stage_id: stageId,
-          source: 'landing_page',
         })
         .select('id')
         .single();
+      if (dealError) console.error('[submit] deal insert error:', dealError.message);
       dealId = newDeal?.id ?? null;
     }
   }
