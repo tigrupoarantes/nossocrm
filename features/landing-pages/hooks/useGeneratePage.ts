@@ -11,6 +11,8 @@ interface GeneratePageParams {
   formFields?: LandingPageField[];
   thankYouMessage?: string;
   thankYouRedirectUrl?: string | null;
+  currentHtml?: string;          // presente em refinamentos iterativos
+  onChunk?: (partial: string) => void; // callback para preview ao vivo
 }
 
 interface GeneratePageResult {
@@ -20,9 +22,9 @@ interface GeneratePageResult {
 
 export function useGeneratePage() {
   return useMutation({
-    mutationFn: async (params: GeneratePageParams): Promise<GeneratePageResult> => {
+    mutationFn: async ({ onChunk, ...params }: GeneratePageParams): Promise<GeneratePageResult> => {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 110_000); // 110s — antes do maxDuration do servidor
+      const timeout = setTimeout(() => controller.abort(), 110_000);
 
       try {
         const res = await fetch('/api/landing-pages/generate', {
@@ -40,7 +42,6 @@ export function useGeneratePage() {
           throw new Error(errMsg);
         }
 
-        // Accumulate plain text stream from toTextStreamResponse()
         const reader = res.body!.getReader();
         const decoder = new TextDecoder();
         let fullText = '';
@@ -49,16 +50,16 @@ export function useGeneratePage() {
           const { done, value } = await reader.read();
           if (done) break;
           fullText += decoder.decode(value, { stream: true });
+          onChunk?.(fullText); // preview ao vivo — passa o HTML acumulado até agora
         }
 
-        // Flush remaining bytes
-        fullText += decoder.decode();
+        fullText += decoder.decode(); // flush bytes restantes
 
         if (!fullText.trim()) {
           throw new Error('A IA não retornou conteúdo. Tente novamente.');
         }
 
-        // Strip markdown code fences se o modelo insistir em adicioná-los
+        // Strip markdown code fences (alguns modelos adicionam mesmo instruídos a não fazer)
         const cleaned = fullText.trim()
           .replace(/^```(?:html)?\s*/i, '')
           .replace(/\s*```\s*$/, '')

@@ -6,7 +6,7 @@
 import { streamText } from 'ai';
 import { z } from 'zod';
 import { requireAITaskContext, AITaskHttpError } from '@/lib/ai/tasks/server';
-import { buildLandingPagePrompt } from '@/features/landing-pages/lib/page-generator';
+import { buildLandingPagePrompt, buildRefinementPrompt } from '@/features/landing-pages/lib/page-generator';
 
 export const maxDuration = 120;
 
@@ -25,6 +25,7 @@ const GenerateSchema = z.object({
   })).optional().default([]),
   thankYouMessage: z.string().optional(),
   thankYouRedirectUrl: z.string().nullable().optional(),
+  currentHtml: z.string().optional(), // presente em refinamentos iterativos
 });
 
 function json(body: unknown, status = 200) {
@@ -45,17 +46,20 @@ export async function POST(req: Request) {
       return json({ error: (issue as { message?: string }).message ?? 'Payload inválido.' }, 400);
     }
 
-    const { prompt, orgName, webhookUrl, apiKey, formFields, thankYouMessage, thankYouRedirectUrl } = parsed.data;
+    const { prompt, orgName, webhookUrl, apiKey, formFields, thankYouMessage, thankYouRedirectUrl, currentHtml } = parsed.data;
 
-    const { system, userPrompt } = buildLandingPagePrompt({
-      userPrompt: prompt,
-      orgName,
-      webhookUrl,
-      apiKey,
-      formFields,
-      thankYouMessage,
-      thankYouRedirectUrl,
-    });
+    // Refinamento iterativo: usuário já tem HTML e quer alterar algo
+    const { system, userPrompt } = currentHtml
+      ? buildRefinementPrompt(prompt, currentHtml)
+      : buildLandingPagePrompt({
+          userPrompt: prompt,
+          orgName,
+          webhookUrl,
+          apiKey,
+          formFields,
+          thankYouMessage,
+          thankYouRedirectUrl,
+        });
 
     const result = streamText({
       model,

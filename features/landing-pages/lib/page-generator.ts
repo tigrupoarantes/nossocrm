@@ -146,6 +146,31 @@ export interface BuiltLandingPagePrompt {
   userPrompt: string;
 }
 
+// =============================================================================
+// System Prompt para REFINAMENTO de Landing Pages existentes
+// =============================================================================
+
+export const REFINEMENT_SYSTEM_PROMPT = `Você é um especialista em design de landing pages de alta conversão.
+Você está EDITANDO uma landing page HTML existente.
+
+REGRAS OBRIGATÓRIAS:
+1. Retorne APENAS o HTML COMPLETO e atualizado, sem markdown, sem explicações, sem code fences
+2. Mantenha TODO o código JavaScript de submissão do formulário (fetch, handlers) intacto
+3. Preserve os campos do formulário, webhook URL e api-key existentes
+4. Mantenha o HTML auto-contido (sem dependências externas além das que já existem)
+5. Aplique APENAS as alterações solicitadas pelo usuário — não reescreva o que não foi pedido
+6. O HTML final deve ser completo e funcional`;
+
+export function buildRefinementPrompt(
+  instruction: string,
+  currentHtml: string,
+): BuiltLandingPagePrompt {
+  return {
+    system: `${REFINEMENT_SYSTEM_PROMPT}\n\n---\n\nHTML ATUAL DA LANDING PAGE:\n${currentHtml}`,
+    userPrompt: instruction,
+  };
+}
+
 export function buildLandingPagePrompt(params: BuildPromptParams): BuiltLandingPagePrompt {
   const {
     userPrompt,

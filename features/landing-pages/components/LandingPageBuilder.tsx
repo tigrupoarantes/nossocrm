@@ -1,15 +1,29 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Sparkles, Save, Globe, ArrowLeft, Loader2, RefreshCw, BarChart3 } from 'lucide-react';
+import {
+  ArrowLeft, Globe, Save, Loader2, Send, Sparkles,
+  BarChart3, CheckCircle2, AlertCircle,
+} from 'lucide-react';
 import { useLandingPage, useCreateLandingPage, useUpdateLandingPage } from '../hooks/useLandingPages';
 import { useGeneratePage } from '../hooks/useGeneratePage';
 import { generateSlug } from '../lib/slug-utils';
 import { LivePreview } from './LivePreview';
 import { PublishDialog } from './PublishDialog';
 import { SubmissionsList } from './SubmissionsList';
-import type { LandingPage, LandingPageField } from '@/types';
+import type { LandingPage } from '@/types';
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  text: string;
+  status?: 'generating' | 'done' | 'error';
+}
 
 interface LandingPageBuilderProps {
   landingPageId?: string;
@@ -17,111 +31,185 @@ interface LandingPageBuilderProps {
 
 type Tab = 'builder' | 'leads';
 
+const SUGGESTIONS = [
+  'Landing page para captar leads para um curso de marketing digital',
+  'Página de vendas para serviço de consultoria empresarial',
+  'Landing page de lançamento para um produto SaaS',
+];
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
 export function LandingPageBuilder({ landingPageId }: LandingPageBuilderProps) {
   const router = useRouter();
   const isNew = !landingPageId;
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const { data: existingLP, isLoading: isLoadingLP } = useLandingPage(landingPageId ?? null);
   const createMutation = useCreateLandingPage();
   const updateMutation = useUpdateLandingPage(landingPageId ?? '');
   const generateMutation = useGeneratePage();
 
-  // Form state
-  const [prompt, setPrompt] = useState('');
+  // Core state
   const [title, setTitle] = useState('');
   const [slug, setSlug] = useState('');
   const [htmlContent, setHtmlContent] = useState('');
+  const [liveHtml, setLiveHtml] = useState(''); // acumula chunks durante streaming
+  const [savedId, setSavedId] = useState<string | null>(landingPageId ?? null);
+
+  // Chat state
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [inputValue, setInputValue] = useState('');
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  // UI state
   const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>('desktop');
   const [showPublishDialog, setShowPublishDialog] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>('builder');
-  const [savedId, setSavedId] = useState<string | null>(landingPageId ?? null);
-  const [createError, setCreateError] = useState<string | null>(null);
 
-  // Preencher estado ao carregar LP existente
+  // -------------------------------------------------------------------------
+  // Hydrate com LP existente
+  // -------------------------------------------------------------------------
   useEffect(() => {
-    if (existingLP) {
-      setTitle(existingLP.title ?? '');
-      setSlug(existingLP.slug ?? '');
-      setHtmlContent(existingLP.htmlContent ?? '');
-      setPrompt(existingLP.promptUsed ?? '');
+    if (!existingLP) return;
+    setTitle(existingLP.title ?? '');
+    setSlug(existingLP.slug ?? '');
+    setHtmlContent(existingLP.htmlContent ?? '');
+    if (existingLP.promptUsed && messages.length === 0) {
+      setMessages([
+        { id: 'init-user', role: 'user', text: existingLP.promptUsed, status: 'done' },
+        {
+          id: 'init-ai', role: 'assistant',
+          text: '✓ Landing page carregada. Descreva uma alteração abaixo para refiná-la.',
+          status: 'done',
+        },
+      ]);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [existingLP]);
 
-  // Auto-gerar slug ao digitar título (apenas para novas LPs)
+  // Scroll automático no chat
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  // -------------------------------------------------------------------------
+  // Handlers
+  // -------------------------------------------------------------------------
   const handleTitleChange = (value: string) => {
     setTitle(value);
-    if (isNew) setSlug(generateSlug(value));
+    if (isNew && !savedId) setSlug(generateSlug(value));
   };
 
-  // Obter URL do webhook para a LP atual
-  const webhookUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/api/p/${slug || 'minha-lp'}/submit`;
-  const apiKey = existingLP?.webhookApiKey ?? 'preview-key';
+  const isGenerating = generateMutation.isPending;
+  const isSaving = createMutation.isPending || updateMutation.isPending;
+  const currentStatus = existingLP?.status ?? 'draft';
+  const currentId = savedId ?? landingPageId;
+  const isRefinement = !!htmlContent && messages.length > 0;
 
-  async function handleGenerate() {
-    if (!prompt.trim()) return;
-    if (!title.trim()) {
-      alert('Dê um nome para a landing page antes de gerar.');
-      return;
-    }
+  // HTML que o preview deve exibir: chunks ao vivo durante geração, fixo depois
+  const previewHtml = isGenerating && liveHtml ? liveHtml : htmlContent;
 
+  async function handleSubmit() {
+    const text = inputValue.trim();
+    if (!text || isGenerating) return;
+
+    setInputValue('');
     setCreateError(null);
 
-    // Salvar rascunho primeiro se for nova LP
-    let currentId = savedId;
+    const userMsgId = `u-${Date.now()}`;
+    const aiMsgId = `a-${Date.now()}`;
+
+    setMessages(prev => [
+      ...prev,
+      { id: userMsgId, role: 'user', text },
+      { id: aiMsgId, role: 'assistant', text: '', status: 'generating' },
+    ]);
+
+    // Auto-título a partir do prompt se ainda não tiver
+    const lpTitle = title.trim() || text.split(' ').slice(0, 6).join(' ');
+    const lpSlug = slug || generateSlug(lpTitle);
+    if (!title.trim()) { setTitle(lpTitle); setSlug(lpSlug); }
+
+    // Criar rascunho se for LP nova
+    let resolvedId = savedId;
     let createdLP: LandingPage | null = null;
-    if (isNew && !currentId) {
+    if (isNew && !resolvedId) {
       try {
-        createdLP = await createMutation.mutateAsync({ title, slug });
-        currentId = createdLP.id;
+        createdLP = await createMutation.mutateAsync({ title: lpTitle, slug: lpSlug });
+        resolvedId = createdLP.id;
         setSavedId(createdLP.id);
       } catch (e) {
         setCreateError((e as Error).message ?? 'Erro ao criar landing page.');
+        setMessages(prev => prev.map(m =>
+          m.id === aiMsgId
+            ? { ...m, text: 'Erro ao criar a landing page. Tente novamente.', status: 'error' }
+            : m
+        ));
         return;
       }
     }
 
     const resolvedApiKey = createdLP?.webhookApiKey ?? existingLP?.webhookApiKey ?? 'key';
+    const resolvedWebhook = `${typeof window !== 'undefined' ? window.location.origin : ''}/api/p/${lpSlug}/submit`;
 
-    const result = await generateMutation.mutateAsync({
-      prompt,
-      orgName: title,
-      webhookUrl: `${typeof window !== 'undefined' ? window.location.origin : ''}/api/p/${slug}/submit`,
-      apiKey: resolvedApiKey,
-      formFields: [] as LandingPageField[],
-    });
-
-    setHtmlContent(result.html);
-
-    // Salvar HTML gerado automaticamente
-    if (currentId) {
-      await updateMutation.mutateAsync({
-        htmlContent: result.html,
-        promptUsed: prompt,
-        aiModel: result.model,
+    try {
+      const result = await generateMutation.mutateAsync({
+        prompt: text,
+        orgName: lpTitle,
+        webhookUrl: resolvedWebhook,
+        apiKey: resolvedApiKey,
+        currentHtml: isRefinement ? htmlContent : undefined,
+        onChunk: (partial) => setLiveHtml(partial),
       });
+
+      setHtmlContent(result.html);
+      setLiveHtml('');
+
+      setMessages(prev => prev.map(m =>
+        m.id === aiMsgId
+          ? {
+              ...m,
+              text: isRefinement
+                ? '✓ Alteração aplicada com sucesso!'
+                : '✓ Landing page gerada! Descreva uma alteração para refiná-la.',
+              status: 'done',
+            }
+          : m
+      ));
+
+      if (resolvedId) {
+        await updateMutation.mutateAsync({
+          htmlContent: result.html,
+          promptUsed: isRefinement ? undefined : text,
+          aiModel: result.model,
+        });
+      }
+    } catch (e) {
+      setLiveHtml('');
+      setMessages(prev => prev.map(m =>
+        m.id === aiMsgId
+          ? { ...m, text: (e as Error).message ?? 'Erro ao gerar. Tente novamente.', status: 'error' }
+          : m
+      ));
     }
   }
 
   async function handleSave() {
-    if (!title.trim()) {
-      alert('O nome da landing page é obrigatório.');
-      return;
-    }
-
+    if (!title.trim()) { alert('O nome da landing page é obrigatório.'); return; }
     if (isNew && !savedId) {
-      const created = await createMutation.mutateAsync({ title, slug, htmlContent, promptUsed: prompt });
+      const created = await createMutation.mutateAsync({ title, slug, htmlContent });
       setSavedId(created.id);
       router.replace(`/landing-pages/${created.id}`);
     } else {
-      await updateMutation.mutateAsync({ title, slug, htmlContent, promptUsed: prompt });
+      await updateMutation.mutateAsync({ title, slug, htmlContent });
     }
   }
 
-  const isSaving = createMutation.isPending || updateMutation.isPending;
-  const isGenerating = generateMutation.isPending;
-  const currentStatus = existingLP?.status ?? 'draft';
-  const currentId = savedId ?? landingPageId;
-
+  // -------------------------------------------------------------------------
+  // Loading skeleton
+  // -------------------------------------------------------------------------
   if (!isNew && isLoadingLP) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -130,73 +218,79 @@ export function LandingPageBuilder({ landingPageId }: LandingPageBuilderProps) {
     );
   }
 
+  // -------------------------------------------------------------------------
+  // Render
+  // -------------------------------------------------------------------------
   return (
-    <div className="flex flex-col h-full space-y-4">
-      {/* Header */}
-      <div className="flex items-center gap-3">
+    <div className="flex flex-col h-full">
+
+      {/* ── Header ── */}
+      <div className="flex items-center gap-3 pb-3 border-b border-slate-200 dark:border-white/10 shrink-0">
         <button
           onClick={() => router.push('/landing-pages')}
-          className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
+          className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition-colors shrink-0"
+          title="Voltar"
         >
           <ArrowLeft size={18} />
         </button>
-        <div className="flex-1 min-w-0">
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => handleTitleChange(e.target.value)}
-            placeholder="Nome da landing page..."
-            className="w-full text-xl font-bold bg-transparent text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none"
-          />
-          {slug && (
-            <p className="text-xs text-slate-400 font-mono mt-0.5 truncate">
-              /p/{slug}
-            </p>
-          )}
-        </div>
 
-        <div className="flex items-center gap-2 shrink-0">
-          {/* Status badge */}
-          <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${currentStatus === 'published'
+        <input
+          type="text"
+          value={title}
+          onChange={(e) => handleTitleChange(e.target.value)}
+          placeholder="Nome da landing page..."
+          className="flex-1 min-w-0 text-lg font-bold bg-transparent text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none"
+        />
+
+        {slug && (
+          <span className="text-xs text-slate-400 font-mono hidden md:block shrink-0 truncate max-w-40">
+            /p/{slug}
+          </span>
+        )}
+
+        <span className={`text-xs px-2.5 py-1 rounded-full font-medium shrink-0 ${
+          currentStatus === 'published'
             ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
             : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
-            }`}>
-            {currentStatus === 'published' ? 'Publicada' : 'Rascunho'}
-          </span>
+        }`}>
+          {currentStatus === 'published' ? 'Publicada' : 'Rascunho'}
+        </span>
 
-          <button
-            onClick={handleSave}
-            disabled={isSaving}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 dark:border-white/10 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 disabled:opacity-50 transition-colors"
-          >
-            {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-            Salvar
-          </button>
+        <button
+          onClick={handleSave}
+          disabled={isSaving}
+          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 dark:border-white/10 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 disabled:opacity-50 transition-colors shrink-0"
+        >
+          {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+          <span className="hidden sm:inline">Salvar</span>
+        </button>
 
-          <button
-            onClick={() => setShowPublishDialog(true)}
-            disabled={!currentId}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-sm font-medium transition-colors"
-          >
-            <Globe size={14} />
+        <button
+          onClick={() => setShowPublishDialog(true)}
+          disabled={!currentId}
+          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-sm font-medium transition-colors shrink-0"
+        >
+          <Globe size={14} />
+          <span className="hidden sm:inline">
             {currentStatus === 'published' ? 'Ver publicada' : 'Publicar'}
-          </button>
-        </div>
+          </span>
+        </button>
       </div>
 
-      {/* Tabs */}
-      <div className="flex items-center gap-1 border-b border-slate-200 dark:border-white/10">
+      {/* ── Tabs ── */}
+      <div className="flex items-center gap-1 border-b border-slate-200 dark:border-white/10 shrink-0">
         {([
-          { id: 'builder', label: 'Builder', icon: Sparkles },
-          { id: 'leads', label: 'Leads', icon: BarChart3 },
-        ] as { id: Tab; label: string; icon: React.ElementType }[]).map(({ id, label, icon: Icon }) => (
+          { id: 'builder' as Tab, label: 'Builder', icon: Sparkles },
+          { id: 'leads' as Tab, label: 'Leads', icon: BarChart3 },
+        ]).map(({ id, label, icon: Icon }) => (
           <button
             key={id}
             onClick={() => setActiveTab(id)}
-            className={`inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === id
-              ? 'border-primary-500 text-primary-600 dark:text-primary-400'
-              : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-white'
-              }`}
+            className={`inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === id
+                ? 'border-primary-500 text-primary-600 dark:text-primary-400'
+                : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-white'
+            }`}
           >
             <Icon size={14} />
             {label}
@@ -204,99 +298,129 @@ export function LandingPageBuilder({ landingPageId }: LandingPageBuilderProps) {
         ))}
       </div>
 
-      {/* Tab: Builder */}
+      {/* ── Builder ── */}
       {activeTab === 'builder' && (
-        <div className="flex flex-col lg:flex-row gap-4 flex-1 min-h-0">
-          {/* Coluna esquerda: prompt + config */}
-          <div className="w-full lg:w-80 shrink-0 space-y-4">
-            {/* Prompt */}
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-                Descreva sua landing page
-              </label>
-              <textarea
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder="Ex: Landing page para captação de leads para curso de marketing digital. Público-alvo: empreendedores. Destaque os benefícios: certificado, mentoria ao vivo e acesso vitalício."
-                rows={6}
-                className="w-full px-3 py-2.5 text-sm bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
-              />
+        <div className="flex flex-col lg:flex-row gap-4 flex-1 min-h-0 pt-4">
+
+          {/* Painel esquerdo — Chat */}
+          <div className="w-full lg:w-80 shrink-0 flex flex-col gap-2 min-h-0">
+
+            {/* Histórico de mensagens */}
+            <div className="flex-1 overflow-y-auto space-y-3 min-h-0 pr-1">
+              {messages.length === 0 ? (
+                /* Empty state — sugestões */
+                <div className="flex flex-col items-center justify-center h-full text-center gap-4 py-6 px-2">
+                  <div className="w-12 h-12 rounded-2xl bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center">
+                    <Sparkles size={22} className="text-primary-600 dark:text-primary-400" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-slate-700 dark:text-white text-sm">
+                      Crie sua landing page
+                    </p>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Descreva o que você quer — a IA gera o HTML completo
+                    </p>
+                  </div>
+                  <div className="space-y-2 w-full">
+                    {SUGGESTIONS.map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => setInputValue(s)}
+                        className="w-full text-left text-xs px-3 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors leading-relaxed"
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                /* Mensagens */
+                messages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                  >
+                    {msg.role === 'assistant' && (
+                      <div className="w-6 h-6 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center shrink-0 mt-0.5">
+                        {msg.status === 'generating' ? (
+                          <Loader2 size={12} className="animate-spin text-primary-600 dark:text-primary-400" />
+                        ) : msg.status === 'error' ? (
+                          <AlertCircle size={12} className="text-red-500" />
+                        ) : (
+                          <CheckCircle2 size={12} className="text-primary-600 dark:text-primary-400" />
+                        )}
+                      </div>
+                    )}
+                    <div className={`max-w-[85%] px-3 py-2 rounded-2xl text-xs leading-relaxed ${
+                      msg.role === 'user'
+                        ? 'bg-primary-600 text-white rounded-br-sm'
+                        : msg.status === 'error'
+                          ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-bl-sm'
+                          : 'bg-slate-100 dark:bg-white/8 text-slate-700 dark:text-slate-300 rounded-bl-sm'
+                    }`}>
+                      {msg.status === 'generating' && !msg.text
+                        ? <span className="italic text-slate-400 dark:text-slate-500">Gerando HTML...</span>
+                        : msg.text}
+                    </div>
+                  </div>
+                ))
+              )}
+              <div ref={messagesEndRef} />
             </div>
 
-            <button
-              onClick={handleGenerate}
-              disabled={isGenerating || !prompt.trim()}
-              className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white font-medium text-sm transition-colors"
-            >
-              {isGenerating ? (
-                <><Loader2 size={16} className="animate-spin" />Gerando HTML...</>
-              ) : htmlContent ? (
-                <><RefreshCw size={16} />Regenerar com IA</>
-              ) : (
-                <><Sparkles size={16} />Gerar com IA</>
-              )}
-            </button>
-
             {createError && (
-              <p className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 rounded-xl px-3 py-2">
+              <p className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 rounded-xl px-3 py-2 shrink-0">
                 {createError}
               </p>
             )}
 
-            {generateMutation.error && (
-              <p className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 rounded-xl px-3 py-2">
-                {generateMutation.error.message}
-              </p>
-            )}
-
-            {/* Config: slug */}
-            <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-white/5">
-              <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-                URL (Slug)
-              </label>
-              <div className="flex items-center gap-1.5 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2">
-                <span className="text-xs text-slate-400">/p/</span>
-                <input
-                  type="text"
-                  value={slug}
-                  onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
-                  className="flex-1 text-sm bg-transparent text-slate-900 dark:text-white focus:outline-none"
-                  placeholder="minha-landing-page"
-                />
-              </div>
+            {/* Input de prompt */}
+            <div className="shrink-0 relative">
+              <textarea
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(); }
+                }}
+                placeholder={isRefinement
+                  ? 'Solicite uma alteração... (ex: mude a cor para azul)'
+                  : 'Descreva sua landing page...'}
+                rows={3}
+                disabled={isGenerating}
+                className="w-full px-3 py-2.5 pr-10 text-sm bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none disabled:opacity-50"
+              />
+              <button
+                onClick={handleSubmit}
+                disabled={isGenerating || !inputValue.trim()}
+                className="absolute right-2 bottom-2.5 p-1.5 rounded-lg bg-primary-600 hover:bg-primary-700 disabled:opacity-40 text-white transition-colors"
+                title="Enviar (Enter)"
+              >
+                {isGenerating
+                  ? <Loader2 size={14} className="animate-spin" />
+                  : <Send size={14} />}
+              </button>
             </div>
-
-            {/* HTML bruto (colapsável) */}
-            {htmlContent && (
-              <details className="group">
-                <summary className="text-xs font-medium text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-300">
-                  Ver/editar HTML bruto
-                </summary>
-                <textarea
-                  value={htmlContent}
-                  onChange={(e) => setHtmlContent(e.target.value)}
-                  rows={10}
-                  className="mt-2 w-full px-3 py-2 text-xs font-mono bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-y"
-                />
-              </details>
-            )}
           </div>
 
-          {/* Coluna direita: preview */}
+          {/* Painel direito — Preview */}
           <div className="flex-1 min-h-0 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl overflow-hidden">
-            <LivePreview html={htmlContent} mode={previewMode} onModeChange={setPreviewMode} isGenerating={isGenerating} />
+            <LivePreview
+              html={previewHtml}
+              mode={previewMode}
+              onModeChange={setPreviewMode}
+              isGenerating={isGenerating && !liveHtml}
+            />
           </div>
         </div>
       )}
 
-      {/* Tab: Leads */}
+      {/* ── Leads ── */}
       {activeTab === 'leads' && currentId && (
-        <div className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-6">
+        <div className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-6 mt-4">
           <SubmissionsList landingPageId={currentId} />
         </div>
       )}
 
-      {/* Dialog de publicação */}
       {showPublishDialog && currentId && (
         <PublishDialog
           landingPageId={currentId}
