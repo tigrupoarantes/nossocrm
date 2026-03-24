@@ -108,8 +108,12 @@ export function LandingPageBuilder({ landingPageId }: LandingPageBuilderProps) {
   const currentId = savedId ?? landingPageId;
   const isRefinement = !!htmlContent && messages.length > 0;
 
-  // HTML que o preview deve exibir: chunks ao vivo durante geração, fixo depois
-  const previewHtml = isGenerating && liveHtml ? liveHtml : htmlContent;
+  // HTML que o preview deve exibir.
+  // Usa liveHtml (chunks ao vivo) quando disponível, depois cai para htmlContent.
+  // NÃO depende de isGenerating para evitar race condition: React Query pode
+  // marcar isPending=false em um render antes de setHtmlContent ser aplicado,
+  // causando um flash de preview vazio.
+  const previewHtml = liveHtml || htmlContent;
 
   async function handleSubmit() {
     const text = inputValue.trim();
@@ -409,7 +413,7 @@ export function LandingPageBuilder({ landingPageId }: LandingPageBuilderProps) {
               html={previewHtml}
               mode={previewMode}
               onModeChange={setPreviewMode}
-              isGenerating={isGenerating && !liveHtml}
+              isGenerating={isGenerating && !liveHtml && !htmlContent}
             />
           </div>
         </div>
