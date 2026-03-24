@@ -121,6 +121,7 @@ export function LandingPageBuilder({ landingPageId }: LandingPageBuilderProps) {
 
     setInputValue('');
     setCreateError(null);
+    setLiveHtml(''); // limpa o streaming da geração anterior
 
     const userMsgId = `u-${Date.now()}`;
     const aiMsgId = `a-${Date.now()}`;
@@ -169,7 +170,10 @@ export function LandingPageBuilder({ landingPageId }: LandingPageBuilderProps) {
       });
 
       setHtmlContent(result.html);
-      setLiveHtml('');
+      // Mantém liveHtml com o HTML final limpo — garante que o preview nunca
+      // fique vazio por race condition entre htmlContent e liveHtml.
+      // liveHtml é apagado no INÍCIO da próxima geração (acima).
+      setLiveHtml(result.html);
 
       setMessages(prev => prev.map(m =>
         m.id === aiMsgId
