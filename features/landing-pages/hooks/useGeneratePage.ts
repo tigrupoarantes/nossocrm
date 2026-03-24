@@ -21,39 +21,47 @@ interface GeneratePageResult {
 export function useGeneratePage() {
   return useMutation({
     mutationFn: async (params: GeneratePageParams): Promise<GeneratePageResult> => {
-      const res = await fetch('/api/landing-pages/generate', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(params),
-      });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 110_000); // 110s — antes do maxDuration do servidor
 
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        const errMsg = typeof err.error === 'string'
-          ? err.error
-          : (err.error?.message ?? 'Erro ao gerar landing page. Tente novamente.');
-        throw new Error(errMsg);
+      try {
+        const res = await fetch('/api/landing-pages/generate', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(params),
+          signal: controller.signal,
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          const errMsg = typeof err.error === 'string'
+            ? err.error
+            : (err.error?.message ?? 'Erro ao gerar landing page. Tente novamente.');
+          throw new Error(errMsg);
+        }
+
+        // Accumulate plain text stream from toTextStreamResponse()
+        const reader = res.body!.getReader();
+        const decoder = new TextDecoder();
+        let fullText = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          fullText += decoder.decode(value, { stream: true });
+        }
+
+        // Flush remaining bytes
+        fullText += decoder.decode();
+
+        if (!fullText.trim()) {
+          throw new Error('A IA não retornou conteúdo. Tente novamente.');
+        }
+
+        return { html: fullText.trim(), model: 'stream' };
+      } finally {
+        clearTimeout(timeout);
       }
-
-      // Accumulate plain text stream from toTextStreamResponse()
-      const reader = res.body!.getReader();
-      const decoder = new TextDecoder();
-      let fullText = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        fullText += decoder.decode(value, { stream: true });
-      }
-
-      // Flush remaining bytes
-      fullText += decoder.decode();
-
-      if (!fullText.trim()) {
-        throw new Error('A IA não retornou conteúdo. Tente novamente.');
-      }
-
-      return { html: fullText.trim(), model: 'stream' };
     },
   });
 }

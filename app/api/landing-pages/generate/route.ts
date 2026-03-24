@@ -47,7 +47,7 @@ export async function POST(req: Request) {
 
     const { prompt, orgName, webhookUrl, apiKey, formFields, thankYouMessage, thankYouRedirectUrl } = parsed.data;
 
-    const fullPrompt = buildLandingPagePrompt({
+    const { system, userPrompt } = buildLandingPagePrompt({
       userPrompt: prompt,
       orgName,
       webhookUrl,
@@ -59,8 +59,10 @@ export async function POST(req: Request) {
 
     const result = streamText({
       model,
+      system,
       maxRetries: 0,
-      prompt: fullPrompt,
+      maxOutputTokens: 8192,
+      messages: [{ role: 'user', content: userPrompt }],
     });
 
     return result.toTextStreamResponse();

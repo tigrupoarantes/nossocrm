@@ -141,7 +141,12 @@ export interface BuildPromptParams {
   thankYouRedirectUrl?: string | null;
 }
 
-export function buildLandingPagePrompt(params: BuildPromptParams): string {
+export interface BuiltLandingPagePrompt {
+  system: string;
+  userPrompt: string;
+}
+
+export function buildLandingPagePrompt(params: BuildPromptParams): BuiltLandingPagePrompt {
   const {
     userPrompt,
     orgName,
@@ -166,5 +171,5 @@ export function buildLandingPagePrompt(params: BuildPromptParams): string {
     .replace(/\{\{REDIRECT_OR_MESSAGE\}\}/g, redirectOrMessage)
     .replace(/\{\{CTA_TEXT\}\}/g, 'Quero saber mais');
 
-  return system + '\n\n---\n\nDESCRIÇÃO DA LANDING PAGE:\n' + userPrompt;
+  return { system, userPrompt };
 }
