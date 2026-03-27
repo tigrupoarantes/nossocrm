@@ -130,12 +130,16 @@ export async function POST(req: Request, { params }: RouteParams) {
   }
 
   // Buscar deal + contato para obter telefone / IDs externos
-  const { data: deal } = await supabase
+  const { data: deal, error: dealErr } = await supabase
     .from('deals')
     .select('id, contact_id, contacts ( id, name, phone )')
     .eq('id', dealId)
     .eq('organization_id', profile.organization_id)
     .single();
+
+  if (dealErr) {
+    console.error('[conversations/POST] deal fetch error:', dealErr);
+  }
 
   if (!deal) {
     return NextResponse.json({ error: 'Deal not found' }, { status: 404 });
@@ -159,40 +163,86 @@ export async function POST(req: Request, { params }: RouteParams) {
     ? contact.phone.replace(/\D/g, '') + '@c.us'
     : null;
 
-  // Verificar se já existe conversa para este deal/canal (evitar duplicata)
-  const { data: existing } = await supabase
-    .from('conversations')
-    .select('id')
-    .eq('deal_id', dealId)
-    .eq('organization_id', profile.organization_id)
-    .eq('channel', channel)
-    .maybeSingle();
+  console.log('[conversations/POST] dealId=%s channel=%s waChatId=%s contactId=%s', dealId, channel, waChatId, contact.id);
 
+  // Buscar conversa existente por wa_chat_id (unique constraint) OU por deal+canal
   let conversationId: string;
 
-  if (existing) {
-    conversationId = existing.id;
-  } else {
-    // Criar nova conversa
-    const { data: newConv, error: createErr } = await supabase
+  if (waChatId) {
+    // Para WhatsApp: buscar pela chave única real (organization_id, wa_chat_id)
+    const { data: existingByChat } = await supabase
       .from('conversations')
-      .insert({
-        organization_id: profile.organization_id,
-        contact_id: contact.id,
-        deal_id: dealId,
-        channel,
-        wa_chat_id: waChatId,
-        unread_count: 0,
-        channel_metadata: {},
-      })
-      .select('id')
-      .single();
+      .select('id, deal_id')
+      .eq('organization_id', profile.organization_id)
+      .eq('wa_chat_id', waChatId)
+      .maybeSingle();
 
-    if (createErr || !newConv) {
-      return NextResponse.json({ error: 'Failed to create conversation' }, { status: 500 });
+    if (existingByChat) {
+      conversationId = existingByChat.id;
+      // Se a conversa existe mas pertence a outro deal, vincular a este deal também
+      if (existingByChat.deal_id !== dealId) {
+        console.log('[conversations/POST] reusing conversation %s (was deal %s, now also %s)', existingByChat.id, existingByChat.deal_id, dealId);
+        await supabase
+          .from('conversations')
+          .update({ deal_id: dealId })
+          .eq('id', existingByChat.id);
+      }
+    } else {
+      // Criar nova conversa
+      const { data: newConv, error: createErr } = await supabase
+        .from('conversations')
+        .insert({
+          organization_id: profile.organization_id,
+          contact_id: contact.id,
+          deal_id: dealId,
+          channel,
+          wa_chat_id: waChatId,
+          unread_count: 0,
+          channel_metadata: {},
+        })
+        .select('id')
+        .single();
+
+      if (createErr || !newConv) {
+        console.error('[conversations/POST] create conversation error:', createErr);
+        return NextResponse.json({ error: 'Failed to create conversation', detail: createErr?.message }, { status: 500 });
+      }
+
+      conversationId = newConv.id;
     }
+  } else {
+    // Non-WhatsApp: buscar por deal + canal
+    const { data: existing } = await supabase
+      .from('conversations')
+      .select('id')
+      .eq('deal_id', dealId)
+      .eq('organization_id', profile.organization_id)
+      .eq('channel', channel)
+      .maybeSingle();
 
-    conversationId = newConv.id;
+    if (existing) {
+      conversationId = existing.id;
+    } else {
+      const { data: newConv, error: createErr } = await supabase
+        .from('conversations')
+        .insert({
+          organization_id: profile.organization_id,
+          contact_id: contact.id,
+          deal_id: dealId,
+          channel,
+          unread_count: 0,
+          channel_metadata: {},
+        })
+        .select('id')
+        .single();
+
+      if (createErr || !newConv) {
+        console.error('[conversations/POST] create conversation error:', createErr);
+        return NextResponse.json({ error: 'Failed to create conversation', detail: createErr?.message }, { status: 500 });
+      }
+
+      conversationId = newConv.id;
+    }
   }
 
   // Enviar mensagem via router omnichannel
@@ -208,12 +258,13 @@ export async function POST(req: Request, { params }: RouteParams) {
     externalMessageId = result.externalMessageId;
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Send failed';
+    console.error('[conversations/POST] routeAndSendMessage error:', msg);
     return NextResponse.json({ error: msg }, { status: 502 });
   }
 
   // Persistir mensagem
   const now = new Date().toISOString();
-  const { data: message } = await supabase
+  const { data: message, error: msgErr } = await supabase
     .from('messages')
     .insert({
       organization_id: profile.organization_id,
@@ -230,11 +281,17 @@ export async function POST(req: Request, { params }: RouteParams) {
     .select()
     .single();
 
+  if (msgErr) {
+    console.error('[conversations/POST] insert message error:', msgErr);
+    return NextResponse.json({ error: 'Failed to persist message', detail: msgErr.message }, { status: 500 });
+  }
+
   // Atualizar last_message_at
   await supabase
     .from('conversations')
     .update({ last_message_at: now })
     .eq('id', conversationId);
 
+  console.log('[conversations/POST] success: convId=%s msgId=%s', conversationId, message?.id);
   return NextResponse.json({ ok: true, conversationId, message }, { status: 201 });
 }

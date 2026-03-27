@@ -95,7 +95,7 @@ async function findActiveDealByPhone(
   const { data: contacts } = await supabase
     .from('contacts')
     .select('id, organization_id')
-    .or(`phone.ilike.%${phone}%,whatsapp.ilike.%${phone}%`)
+    .ilike('phone', `%${phone}%`)
     .limit(5);
 
   if (!contacts || contacts.length === 0) return null;
