@@ -214,21 +214,49 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ tab: initialTab }) => {
     }
   }, [pathname]);
 
-  const tabs = [
-    { id: 'general' as SettingsTab, name: 'Geral', icon: SettingsIcon },
-    ...(profile?.role === 'admin' ? [{ id: 'departments' as SettingsTab, name: 'Departamentos', icon: Users2 }] : []),
-    ...(profile?.role === 'admin' ? [{ id: 'products' as SettingsTab, name: 'Produtos/Serviços', icon: Package }] : []),
-    ...(profile?.role === 'admin' ? [{ id: 'businessUnits' as SettingsTab, name: 'Unidades', icon: Building2 }] : []),
-    ...(profile?.role === 'admin' ? [{ id: 'integrations' as SettingsTab, name: 'Integrações', icon: Plug }] : []),
-    ...(profile?.role === 'admin' ? [{ id: 'communication' as SettingsTab, name: 'Comunicação', icon: MessageSquare }] : []),
-    ...(profile?.role === 'admin' ? [{ id: 'dispatch' as SettingsTab, name: 'Disparo', icon: Send }] : []),
-    ...(profile?.role === 'admin' ? [{ id: 'capi' as SettingsTab, name: 'Facebook CAPI', icon: Zap }] : []),
-    { id: 'ai' as SettingsTab, name: 'Central de I.A', icon: Sparkles },
-    { id: 'credits' as SettingsTab, name: 'Créditos IA', icon: Cpu },
-    { id: 'notifications' as SettingsTab, name: 'Notificações', icon: Bell },
-    { id: 'data' as SettingsTab, name: 'Dados', icon: Database },
-    ...(profile?.role === 'admin' ? [{ id: 'users' as SettingsTab, name: 'Equipe', icon: Users }] : []),
-  ];
+  const isAdmin = profile?.role === 'admin';
+
+  type SidebarItem = { id: SettingsTab; name: string; icon: React.ComponentType<{ className?: string }> };
+  const sidebarGroups: Array<{ label: string; items: SidebarItem[] }> = [
+    {
+      label: 'Geral',
+      items: [
+        { id: 'general' as SettingsTab, name: 'Geral', icon: SettingsIcon },
+        ...(isAdmin ? [{ id: 'departments' as SettingsTab, name: 'Departamentos', icon: Users2 }] : []),
+        ...(isAdmin ? [{ id: 'communication' as SettingsTab, name: 'Comunicação', icon: MessageSquare }] : []),
+        ...(isAdmin ? [{ id: 'users' as SettingsTab, name: 'Equipe', icon: Users }] : []),
+      ] as SidebarItem[],
+    },
+    ...(isAdmin ? [{
+      label: 'Organização',
+      items: [
+        { id: 'products' as SettingsTab, name: 'Produtos/Serviços', icon: Package },
+        { id: 'businessUnits' as SettingsTab, name: 'Unidades', icon: Building2 },
+      ] as SidebarItem[],
+    }] : []),
+    ...(isAdmin ? [{
+      label: 'Integrações',
+      items: [
+        { id: 'integrations' as SettingsTab, name: 'API & Webhooks', icon: Plug },
+        { id: 'dispatch' as SettingsTab, name: 'Disparo', icon: Send },
+        { id: 'capi' as SettingsTab, name: 'Facebook CAPI', icon: Zap },
+      ] as SidebarItem[],
+    }] : []),
+    {
+      label: 'Inteligência Artificial',
+      items: [
+        { id: 'ai' as SettingsTab, name: 'Central de IA', icon: Sparkles },
+        { id: 'credits' as SettingsTab, name: 'Créditos IA', icon: Cpu },
+      ] as SidebarItem[],
+    },
+    {
+      label: 'Preferências',
+      items: [
+        { id: 'notifications' as SettingsTab, name: 'Notificações', icon: Bell },
+        { id: 'data' as SettingsTab, name: 'Dados', icon: Database },
+      ] as SidebarItem[],
+    },
+  ].filter((g) => g.items.length > 0);
 
   const renderContent = () => {
     switch (activeTab) {
@@ -338,31 +366,46 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ tab: initialTab }) => {
 
   return (
     <div className="max-w-5xl mx-auto">
-      {/* Tabs minimalistas */}
-      <div className="flex items-center gap-1 mb-8 border-b border-slate-200 dark:border-white/10">
-        {tabs.map((tab) => {
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`relative flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${isActive
-                ? 'text-primary-600 dark:text-primary-400'
-                : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
-                }`}
-            >
-              <tab.icon className="h-4 w-4" />
-              {tab.name}
-              {isActive && (
-                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-600 dark:bg-primary-400 rounded-full" />
-              )}
-            </button>
-          );
-        })}
-      </div>
+      <div className="flex gap-6">
+        {/* Sidebar vertical de configurações */}
+        <div className="w-52 shrink-0">
+          <nav className="sticky top-6 space-y-4">
+            {sidebarGroups.map((group) => (
+              <div key={group.label}>
+                <p className="px-3 mb-1 text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                  {group.label}
+                </p>
+                <div className="space-y-0.5">
+                  {group.items.map((item) => {
+                    const Icon = item.icon;
+                    const isActive = activeTab === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => setActiveTab(item.id)}
+                        className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left ${
+                          isActive
+                            ? 'bg-primary-500/10 text-primary-600 dark:text-primary-400'
+                            : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white'
+                        }`}
+                      >
+                        <Icon className={`h-4 w-4 shrink-0 ${isActive ? 'text-primary-500' : ''}`} />
+                        {item.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </nav>
+        </div>
 
-      {/* Content */}
-      {renderContent()}
+        {/* Conteúdo da aba ativa */}
+        <div className="flex-1 min-w-0">
+          {renderContent()}
+        </div>
+      </div>
     </div>
   );
 };

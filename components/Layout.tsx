@@ -45,6 +45,12 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Layout as LayoutIcon,
+  Bot,
+  MessageSquare,
+  Megaphone,
+  Link2,
+  BookOpen,
+  Send as SendNav,
 } from 'lucide-react';
 import { useCRM } from '../context/CRMContext';
 import { useAuth } from '../context/AuthContext';
@@ -60,6 +66,15 @@ import { BottomNav, MoreMenuSheet, NavigationRail } from '@/components/navigatio
 import { UIChat } from './ai/UIChat';
 
 import { NotificationPopover } from './notifications/NotificationPopover';
+import dynamic from 'next/dynamic';
+import { GlobalSearch } from '@/components/search/GlobalSearch';
+import { AlertsPanel } from '@/components/notifications/AlertsPanel';
+import { CreditsBadge } from '@/components/ui/CreditsBadge';
+
+const AgentEventsPanel = dynamic(
+  () => import('@/features/super-agent/components/AgentEventsPanel').then((m) => ({ default: m.AgentEventsPanel })),
+  { ssr: false }
+);
 
 /**
  * Props do componente Layout
@@ -260,54 +275,88 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           )}
         </div>
 
-        <nav className={`flex-1 p-4 space-y-2 flex flex-col ${sidebarCollapsed ? 'items-center px-2' : ''}`} aria-label="Navegação do sistema">
-          {[
-            { to: '/inbox', icon: Inbox, label: 'Inbox', prefetch: 'inbox' as const },
-            { to: '/dashboard', icon: LayoutDashboard, label: 'Visão Geral', prefetch: 'dashboard' as const },
-            { to: '/boards', icon: KanbanSquare, label: 'Boards', prefetch: 'boards' as const },
-            { to: '/contacts', icon: Users, label: 'Contatos', prefetch: 'contacts' as const },
-            { to: '/activities', icon: CheckSquare, label: 'Atividades', prefetch: 'activities' as const },
-            { to: '/landing-pages', icon: LayoutIcon, label: 'Landing Pages' },
-            { to: '/reports', icon: BarChart3, label: 'Relatórios', prefetch: 'reports' as const },
-            { to: '/settings', icon: Settings, label: 'Configurações', prefetch: 'settings' as const },
-          ].map((item) => {
-            if (sidebarCollapsed) {
-              return (
-                <Link
-                  key={item.to}
-                  href={item.to}
-                  onMouseEnter={item.prefetch ? () => prefetchRoute(item.prefetch!) : undefined}
-                  onClick={() => setClickedPath(item.to)}
-                  className={(() => {
-                    const isActive = pathname === item.to || (item.to === '/boards' && pathname === '/pipeline');
-                    const wasJustClicked = clickedPath === item.to;
-                    // If user clicked on a DIFFERENT item, immediately deactivate this one
-                    const anotherItemWasClicked = clickedPath && clickedPath !== item.to;
-                    const isActuallyActive = anotherItemWasClicked ? false : (isActive || wasJustClicked);
-                    return `w-10 h-10 rounded-lg flex items-center justify-center ${isActuallyActive
-                      ? 'bg-primary-500/10 text-primary-600 dark:text-primary-400 border border-primary-200 dark:border-primary-900/50'
-                      : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white'
-                      }`;
-                  })()}
-                  title={item.label}
-                >
-                  <item.icon size={20} />
-                </Link>
-              );
-            }
-
-            return (
-              <NavItem
-                key={item.to}
-                to={item.to}
-                icon={item.icon}
-                label={item.label}
-                prefetch={item.prefetch}
-                clickedPath={clickedPath}
-                onItemClick={setClickedPath}
-              />
-            );
-          })}
+        <nav className={`flex-1 py-3 overflow-y-auto flex flex-col gap-3 ${sidebarCollapsed ? 'items-center px-2' : 'px-3'}`} aria-label="Navegação do sistema">
+          {([
+            {
+              label: 'Principal',
+              items: [
+                { to: '/inbox', icon: Inbox, label: 'Inbox', prefetch: 'inbox' as const },
+                { to: '/conversations', icon: MessageSquare, label: 'Conversas' },
+                { to: '/dashboard', icon: LayoutDashboard, label: 'Visão Geral', prefetch: 'dashboard' as const },
+                { to: '/boards', icon: KanbanSquare, label: 'Boards', prefetch: 'boards' as const },
+                { to: '/contacts', icon: Users, label: 'Contatos', prefetch: 'contacts' as const },
+                { to: '/activities', icon: CheckSquare, label: 'Atividades', prefetch: 'activities' as const },
+              ],
+            },
+            {
+              label: 'Vendas & IA',
+              items: [
+                { to: '/prospecting', icon: BarChart3, label: 'Prospectar' },
+                { to: '/ads', icon: Megaphone, label: 'Anúncios' },
+                { to: '/dispatch', icon: SendNav, label: 'Disparos' },
+                { to: '/super-agent', icon: Bot, label: 'Super Agente' },
+              ],
+            },
+            {
+              label: 'Sistema',
+              items: [
+                { to: '/landing-pages', icon: LayoutIcon, label: 'Landing Pages' },
+                { to: '/reports', icon: BarChart3, label: 'Relatórios', prefetch: 'reports' as const },
+                { to: '/connections', icon: Link2, label: 'Conexões' },
+                { to: '/help', icon: BookOpen, label: 'Ajuda' },
+                { to: '/settings', icon: Settings, label: 'Configurações', prefetch: 'settings' as const },
+              ],
+            },
+          ] as Array<{ label: string; items: Array<{ to: string; icon: React.ComponentType<{ size?: number; className?: string }>; label: string; prefetch?: Parameters<typeof prefetchRoute>[0] }> }>).map((section, si) => (
+            <div key={section.label}>
+              {!sidebarCollapsed && (
+                <p className="px-2 mb-1 text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                  {section.label}
+                </p>
+              )}
+              {sidebarCollapsed && si > 0 && (
+                <div className="w-8 h-px bg-slate-200 dark:bg-white/10 mb-1 mx-auto" />
+              )}
+              <div className={`space-y-0.5 ${sidebarCollapsed ? 'flex flex-col items-center' : ''}`}>
+                {section.items.map((item) => {
+                  if (sidebarCollapsed) {
+                    return (
+                      <Link
+                        key={item.to}
+                        href={item.to}
+                        onMouseEnter={item.prefetch ? () => prefetchRoute(item.prefetch!) : undefined}
+                        onClick={() => setClickedPath(item.to)}
+                        className={(() => {
+                          const isActive = pathname === item.to || (item.to === '/boards' && pathname === '/pipeline');
+                          const wasJustClicked = clickedPath === item.to;
+                          const anotherItemWasClicked = clickedPath && clickedPath !== item.to;
+                          const isActuallyActive = anotherItemWasClicked ? false : (isActive || wasJustClicked);
+                          return `w-10 h-10 rounded-lg flex items-center justify-center ${isActuallyActive
+                            ? 'bg-primary-500/10 text-primary-600 dark:text-primary-400 border border-primary-200 dark:border-primary-900/50'
+                            : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white'
+                            }`;
+                        })()}
+                        title={item.label}
+                      >
+                        <item.icon size={20} />
+                      </Link>
+                    );
+                  }
+                  return (
+                    <NavItem
+                      key={item.to}
+                      to={item.to}
+                      icon={item.icon}
+                      label={item.label}
+                      prefetch={item.prefetch}
+                      clickedPath={clickedPath}
+                      onItemClick={setClickedPath}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
 
         {/* Sidebar Toggle Button (Footer) - Only visible when collapsed */}
@@ -429,8 +478,16 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           </div>
 
           {/* Header */}
-          <header className="h-16 glass border-b border-[var(--color-border-subtle)] flex items-center justify-end px-6 z-40 shrink-0" role="banner">
-            <div className="flex items-center gap-4">
+          <header className="h-16 glass border-b border-[var(--color-border-subtle)] flex items-center justify-between px-6 z-40 shrink-0" role="banner">
+            {/* Left: GlobalSearch */}
+            <div className="flex-1 flex items-center">
+              {isDesktop && <GlobalSearch />}
+            </div>
+
+            {/* Right: actions */}
+            <div className="flex items-center gap-2">
+              <CreditsBadge compact />
+
               <button
                 type="button"
                 onClick={() => setIsGlobalAIOpen(!isGlobalAIOpen)}
@@ -453,7 +510,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                 <Bug size={20} aria-hidden="true" />
               </button>
 
-              <NotificationPopover />
+              <AlertsPanel />
+
               <button
                 type="button"
                 onClick={toggleDarkMode}
@@ -490,6 +548,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       {/* Mobile app shell */}
       <BottomNav onOpenMore={() => setIsMoreOpen(true)} />
       <MoreMenuSheet isOpen={isMoreOpen} onClose={() => setIsMoreOpen(false)} />
+
+      {/* Super Agent Events Panel - floating bottom-right */}
+      <AgentEventsPanel />
     </div>
   );
 };
