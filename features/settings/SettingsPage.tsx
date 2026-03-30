@@ -10,13 +10,17 @@ import { DataStorageSettings } from './components/DataStorageSettings';
 import { ProductsCatalogManager } from './components/ProductsCatalogManager';
 import { AICenterSettings } from './AICenterSettings';
 import { BusinessUnitsSection } from './components/BusinessUnitsSection';
+import { DepartmentsSettings } from './components/DepartmentsSettings';
+import { NotificationPreferences } from './components/NotificationPreferences';
+import { AICreditsCard } from './components/AICreditsCard';
+import { FacebookCAPISettings } from './components/FacebookCAPISettings';
 
 import { UsersPage } from './UsersPage';
 import { CommunicationSection } from './components/CommunicationSection';
 import { useAuth } from '@/context/AuthContext';
-import { Settings as SettingsIcon, Users, Database, Sparkles, Plug, Package, Building2, MessageSquare } from 'lucide-react';
+import { Settings as SettingsIcon, Users, Database, Sparkles, Plug, Package, Building2, MessageSquare, Users2, Bell, Cpu, Zap, Send } from 'lucide-react';
 
-type SettingsTab = 'general' | 'products' | 'businessUnits' | 'integrations' | 'ai' | 'data' | 'users' | 'communication';
+type SettingsTab = 'general' | 'products' | 'businessUnits' | 'integrations' | 'ai' | 'data' | 'users' | 'communication' | 'departments' | 'notifications' | 'credits' | 'capi' | 'dispatch';
 
 interface GeneralSettingsProps {
   hash?: string;
@@ -212,11 +216,16 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ tab: initialTab }) => {
 
   const tabs = [
     { id: 'general' as SettingsTab, name: 'Geral', icon: SettingsIcon },
+    ...(profile?.role === 'admin' ? [{ id: 'departments' as SettingsTab, name: 'Departamentos', icon: Users2 }] : []),
     ...(profile?.role === 'admin' ? [{ id: 'products' as SettingsTab, name: 'Produtos/Serviços', icon: Package }] : []),
     ...(profile?.role === 'admin' ? [{ id: 'businessUnits' as SettingsTab, name: 'Unidades', icon: Building2 }] : []),
     ...(profile?.role === 'admin' ? [{ id: 'integrations' as SettingsTab, name: 'Integrações', icon: Plug }] : []),
     ...(profile?.role === 'admin' ? [{ id: 'communication' as SettingsTab, name: 'Comunicação', icon: MessageSquare }] : []),
+    ...(profile?.role === 'admin' ? [{ id: 'dispatch' as SettingsTab, name: 'Disparo', icon: Send }] : []),
+    ...(profile?.role === 'admin' ? [{ id: 'capi' as SettingsTab, name: 'Facebook CAPI', icon: Zap }] : []),
     { id: 'ai' as SettingsTab, name: 'Central de I.A', icon: Sparkles },
+    { id: 'credits' as SettingsTab, name: 'Créditos IA', icon: Cpu },
+    { id: 'notifications' as SettingsTab, name: 'Notificações', icon: Bell },
     { id: 'data' as SettingsTab, name: 'Dados', icon: Database },
     ...(profile?.role === 'admin' ? [{ id: 'users' as SettingsTab, name: 'Equipe', icon: Users }] : []),
   ];
@@ -249,6 +258,79 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ tab: initialTab }) => {
         return <DataStorageSettings />;
       case 'users':
         return <UsersPage />;
+      case 'departments':
+        return (
+          <div className="pb-10">
+            <DepartmentsSettings />
+          </div>
+        );
+      case 'notifications':
+        return (
+          <div className="pb-10">
+            <div className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-6">
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-1 flex items-center gap-2">
+                <Bell className="h-5 w-5" /> Preferências de Notificação
+              </h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
+                Configure quais alertas você deseja receber e por quais canais.
+              </p>
+              <NotificationPreferences />
+            </div>
+          </div>
+        );
+      case 'credits':
+        return (
+          <div className="pb-10">
+            <div className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-6">
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-1 flex items-center gap-2">
+                <Cpu className="h-5 w-5" /> Créditos de IA
+              </h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
+                Acompanhe o consumo de créditos da IA e veja o histórico de uso.
+              </p>
+              <AICreditsCard />
+            </div>
+          </div>
+        );
+      case 'capi':
+        return (
+          <div className="pb-10">
+            <div className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-6">
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-1 flex items-center gap-2">
+                <Zap className="h-5 w-5" /> Facebook Conversions API
+              </h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
+                Configure o rastreamento server-side de conversões para o Facebook Ads.
+              </p>
+              <FacebookCAPISettings />
+            </div>
+          </div>
+        );
+      case 'dispatch':
+        return (
+          <div className="pb-10">
+            <div className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-6">
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-1 flex items-center gap-2">
+                <Send className="h-5 w-5" /> Configurações de Disparo
+              </h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
+                Configure os parâmetros de disparo de mensagens em massa e prospecção.
+              </p>
+              <div className="space-y-4">
+                <div className="p-4 bg-slate-50 dark:bg-white/5 rounded-xl">
+                  <p className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Delay mínimo entre disparos</p>
+                  <p className="text-xs text-slate-500 mb-3">Configurado diretamente em cada campanha de disparo.</p>
+                  <a href="/prospecting" className="text-sm text-blue-600 hover:underline">Gerenciar Prospecção →</a>
+                </div>
+                <div className="p-4 bg-slate-50 dark:bg-white/5 rounded-xl">
+                  <p className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Disparo em massa</p>
+                  <p className="text-xs text-slate-500 mb-3">Configure e monitore seus disparos em massa.</p>
+                  <a href="/dispatch" className="text-sm text-blue-600 hover:underline">Gerenciar Disparos →</a>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
       default:
         return <GeneralSettings hash={hash} isAdmin={profile?.role === 'admin'} />;
     }

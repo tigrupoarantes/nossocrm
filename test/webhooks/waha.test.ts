@@ -24,6 +24,7 @@ const supabaseMock = {
       return {
         select: vi.fn().mockReturnThis(),
         or: vi.fn().mockReturnThis(),
+        ilike: vi.fn().mockReturnThis(),
         limit: contactsQueryMock,
       }
     }
@@ -87,6 +88,8 @@ function makeRequest(body: unknown, headers: Record<string, string> = {}): Reque
 
 beforeEach(() => {
   vi.clearAllMocks()
+  // Garantir que o segredo não vaza entre testes
+  delete process.env.WAHA_WEBHOOK_SECRET
   // Resetar mocks para estado padrão (sem deal encontrado)
   contactsQueryMock.mockResolvedValue({ data: [], error: null })
   dealsQueryMock.mockResolvedValue({ data: [], error: null })
@@ -216,6 +219,7 @@ describe('POST /api/webhooks/waha — sem deal encontrado', () => {
     expect(response.status).toBe(200)
     expect(data.ok).toBe(true)
     expect(data.matched).toBe(false)
+    expect(data.reason).toBe('no_org_match')
     expect(onResponseReceivedMock).not.toHaveBeenCalled()
   })
 })

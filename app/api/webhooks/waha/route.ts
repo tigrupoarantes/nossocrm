@@ -26,6 +26,7 @@
 import { NextResponse } from 'next/server';
 import { createStaticAdminClient } from '@/lib/supabase/server';
 import { onResponseReceived } from '@/lib/automation/triggers';
+import { processWithSuperAgent } from '@/lib/ai/super-agent/engine';
 
 export const runtime = 'nodejs';
 
@@ -215,21 +216,45 @@ export async function POST(request: Request) {
   // Buscar deal ativo para disparar automação
   const match = await findActiveDealByPhone(supabase, normalizedPhone);
 
+  // Sem match = sem org → não persistir com org vazio (evita dados orfãos)
+  if (!match?.organizationId) {
+    return NextResponse.json({ ok: true, matched: false, reason: 'no_org_match' });
+  }
+
   // Persistir conversa e mensagem
   await upsertConversationAndMessage(supabase, {
-    organizationId: match?.organizationId ?? '',
+    organizationId: match.organizationId,
     contactId: null, // será linkado quando tivermos contactId via match
-    dealId: match?.dealId ?? null,
+    dealId: match.dealId ?? null,
     waChatId: fromRaw.includes('@c.us') ? fromRaw : `${normalizedPhone}@c.us`,
     waMessageId: messageId || `${fromRaw}-${timestamp}`,
     body,
     sentAt,
   });
 
-  if (match) {
-    await onResponseReceived(match);
-    return NextResponse.json({ ok: true, matched: true, dealId: match.dealId });
+  await onResponseReceived(match);
+
+  // Super Agente: processar mensagem inbound em background (fire-and-forget)
+  if (body) {
+    const waChatId = fromRaw.includes('@c.us') ? fromRaw : `${normalizedPhone}@c.us`;
+    // Buscar conversation_id que acabou de ser criado/atualizado
+    void Promise.resolve(
+      supabase
+        .from('conversations')
+        .select('id')
+        .eq('organization_id', match.organizationId)
+        .eq('wa_chat_id', waChatId)
+        .single()
+    ).then(({ data: conv }) => {
+      if (!conv?.id) return;
+      return processWithSuperAgent(supabase, {
+        organizationId: match.organizationId,
+        conversationId: conv.id,
+        contactPhone: normalizedPhone,
+        inboundMessage: body,
+      });
+    }).catch((e) => console.error('[SuperAgent] background error:', e));
   }
 
-  return NextResponse.json({ ok: true, matched: false });
+  return NextResponse.json({ ok: true, matched: true, dealId: match.dealId });
 }

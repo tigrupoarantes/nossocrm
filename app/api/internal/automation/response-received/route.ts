@@ -68,6 +68,13 @@ async function findActiveDealByPhone(
 // ---------------------------------------------------------------------------
 
 export async function POST(request: Request) {
+  // Validar secret para evitar abuse externo
+  const secret = request.headers.get('x-automation-secret');
+  const expected = process.env.AUTOMATION_WEBHOOK_SECRET;
+  if (expected && secret !== expected) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   const contentType = request.headers.get('content-type') ?? '';
   let fromPhone = '';
   let dealId = '';

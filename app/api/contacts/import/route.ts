@@ -105,6 +105,23 @@ function normalizeStage(v: string | undefined): string | undefined {
 
 export async function POST(req: Request) {
   try {
+    // Auth: verificar usuario autenticado + org
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('organization_id')
+      .eq('id', user.id)
+      .single();
+
+    if (!profile?.organization_id) {
+      return NextResponse.json({ error: 'Profile not found' }, { status: 403 });
+    }
+
+    const orgId = profile.organization_id;
+
     const form = await req.formData();
     const file = form.get('file');
     const modeRaw = form.get('mode');
@@ -183,12 +200,11 @@ export async function POST(req: Request) {
       );
     }
 
-    const supabase = await createClient();
-
-    // Companies: preload and optionally create missing ones
+    // Companies: preload and optionally create missing ones (scoped by org)
     const { data: companies, error: companiesError } = await supabase
       .from('crm_companies')
       .select('id,name')
+      .eq('organization_id', orgId)
       .is('deleted_at', null);
 
     if (companiesError) {
@@ -211,7 +227,7 @@ export async function POST(req: Request) {
     }
 
     if (createCompanies && missingCompanies.size) {
-      const payload = Array.from(missingCompanies).map(name => ({ name }));
+      const payload = Array.from(missingCompanies).map(name => ({ name, organization_id: orgId }));
       const { data: createdCompanies, error: createCompaniesError } = await supabase
         .from('crm_companies')
         .insert(payload)
@@ -242,6 +258,7 @@ export async function POST(req: Request) {
         const { data: existing, error: existingError } = await supabase
           .from('contacts')
           .select('id,email')
+          .eq('organization_id', orgId)
           .in('email', chunk)
           .is('deleted_at', null);
 
@@ -287,6 +304,7 @@ export async function POST(req: Request) {
       const companyId = companyName ? companyIdByName.get(normalizeHeader(companyName)) : undefined;
 
       const base = {
+        organization_id: orgId,
         name: p.data.name || '',
         email: p.data.email || null,
         phone: phoneE164 || null,
@@ -321,7 +339,8 @@ export async function POST(req: Request) {
         const { error: updateError } = await supabase
           .from('contacts')
           .update(base)
-          .eq('id', id);
+          .eq('id', id)
+          .eq('organization_id', orgId);
 
         if (updateError) {
           errors.push({ rowNumber, message: updateError.message });
