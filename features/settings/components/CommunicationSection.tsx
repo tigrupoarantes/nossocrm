@@ -178,19 +178,20 @@ export function CommunicationSection() {
       .then(data => {
         setStatus(data.configured ?? {});
         if (data.smtp) {
-          setSmtp(s => ({ ...s, ...data.smtp, pass: '' })); // não pré-preenche senha
+          // Mantém o valor mascarado '••••••••' — o servidor sabe preservar o valor existente
+          setSmtp(s => ({ ...s, ...data.smtp }));
         }
         if (data.metaWhatsApp) {
-          setMeta(s => ({ ...s, ...data.metaWhatsApp, accessToken: '', appSecret: '' }));
+          setMeta(s => ({ ...s, ...data.metaWhatsApp }));
         }
         if (data.serasa) {
-          setSerasa(s => ({ ...s, ...data.serasa, clientSecret: '' }));
+          setSerasa(s => ({ ...s, ...data.serasa }));
         }
         if (data.customerBase) {
-          setCustomerBase(s => ({ ...s, ...data.customerBase, apiKey: '' }));
+          setCustomerBase(s => ({ ...s, ...data.customerBase }));
         }
         if (data.waha) {
-          setWaha(s => ({ ...s, ...data.waha, apiKey: '' }));
+          setWaha(s => ({ ...s, ...data.waha }));
         }
       })
       .catch(() => addToast('Erro ao carregar configurações', 'error'))
