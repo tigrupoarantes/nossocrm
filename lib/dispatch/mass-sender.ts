@@ -59,6 +59,27 @@ async function getActiveWAHAInstance(
 }
 
 /**
+ * Busca configuração Meta WhatsApp da organização.
+ */
+async function getMetaWhatsAppConfig(
+  supabase: SupabaseClient,
+  organizationId: string
+): Promise<{ phoneNumberId: string; accessToken: string } | null> {
+  const { data } = await supabase
+    .from('organization_settings')
+    .select('meta_whatsapp_config')
+    .eq('organization_id', organizationId)
+    .maybeSingle()
+
+  const config = (data as Record<string, unknown> | null)?.meta_whatsapp_config as
+    | { phoneNumberId: string; accessToken: string }
+    | null
+
+  if (!config?.phoneNumberId || !config?.accessToken) return null
+  return config
+}
+
+/**
  * Envia uma mensagem via WAHA.
  */
 async function sendWhatsAppMessage(
@@ -100,6 +121,52 @@ async function sendWhatsAppMessage(
 }
 
 /**
+ * Envia mensagem via Meta WhatsApp Cloud API.
+ */
+async function sendMetaWhatsAppMessage(
+  phoneNumberId: string,
+  accessToken: string,
+  phone: string,
+  message: string
+): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  try {
+    const digits = phone.replace(/\D/g, '')
+    const normalized = digits.startsWith('55') ? digits : `55${digits}`
+
+    const res = await fetch(
+      `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: normalized,
+          type: 'text',
+          text: { preview_url: false, body: message },
+        }),
+      }
+    )
+
+    const data = await res.json() as {
+      messages?: Array<{ id: string }>
+      error?: { message: string }
+    }
+
+    if (!res.ok || data.error) {
+      return { success: false, error: data.error?.message ?? `Meta error ${res.status}` }
+    }
+
+    return { success: true, messageId: data.messages?.[0]?.id }
+  } catch (err) {
+    return { success: false, error: String(err) }
+  }
+}
+
+/**
  * Processa um disparo em massa, enviando mensagens com delay entre cada envio.
  */
 export async function processMassDispatch(
@@ -114,9 +181,11 @@ export async function processMassDispatch(
     onProgress,
   } = options
 
-  // Buscar instância WAHA
-  const waha = await getActiveWAHAInstance(supabase, organizationId)
-  if (!waha) {
+  // Detectar adapter disponível: Meta Cloud API > WAHA
+  const metaConfig = await getMetaWhatsAppConfig(supabase, organizationId)
+  const waha = metaConfig ? null : await getActiveWAHAInstance(supabase, organizationId)
+
+  if (!metaConfig && !waha) {
     await supabase
       .from('mass_dispatches')
       .update({ status: 'failed', updated_at: new Date().toISOString() })
@@ -157,13 +226,20 @@ export async function processMassDispatch(
       continue
     }
 
-    const result = await sendWhatsAppMessage(
-      waha.wahaApiUrl,
-      waha.wahaApiKey,
-      waha.instanceName,
-      recipient.phone,
-      message
-    )
+    const result = metaConfig
+      ? await sendMetaWhatsAppMessage(
+          metaConfig.phoneNumberId,
+          metaConfig.accessToken,
+          recipient.phone,
+          message
+        )
+      : await sendWhatsAppMessage(
+          waha!.wahaApiUrl,
+          waha!.wahaApiKey,
+          waha!.instanceName,
+          recipient.phone,
+          message
+        )
 
     if (result.success) {
       await supabase

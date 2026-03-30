@@ -63,37 +63,58 @@ export async function routeAndSendMessage(
 
   const { data: settings } = await supabase
     .from('organization_settings')
-    .select('waha_config, meta_config')
+    .select('waha_config, meta_config, meta_whatsapp_config')
     .eq('organization_id', conv.organization_id)
     .single();
 
   // 2) Despachar para o adapter correto
   switch (channel) {
     case 'whatsapp': {
-      const wahaConfig = (settings as Record<string, unknown>)?.waha_config as
-        | { baseUrl: string; apiKey: string; sessionName: string }
-        | null;
-
-      if (!wahaConfig?.baseUrl) {
-        throw new Error('WAHA not configured for this organization');
-      }
-
       const waChatId = conv.wa_chat_id as string | null;
       if (!waChatId) {
         throw new Error('Conversation has no wa_chat_id');
       }
 
       // Extrair número do chatId (ex.: "5511999990000@c.us" → "+5511999990000")
-      const phone = '+' + waChatId.replace('@c.us', '').replace(/\D/g, '');
+      const phoneDigits = waChatId.replace(/@[cs]\.us$/i, '').replace(/@s\.whatsapp\.net$/i, '').replace(/\D/g, '');
+      const phone = `+${phoneDigits}`;
 
-      const { sendWahaMessage } = await import('./waha');
-      const result = await sendWahaMessage({ to: phone, body: params.body, wahaConfig });
+      const metaConfig = (settings as Record<string, unknown>)?.meta_whatsapp_config as
+        | { phoneNumberId: string; accessToken: string }
+        | null;
 
-      return {
-        ok: true,
-        externalMessageId: result.id,
-        channel: 'whatsapp',
-      };
+      const wahaConfig = (settings as Record<string, unknown>)?.waha_config as
+        | { baseUrl: string; apiKey: string; sessionName: string }
+        | null;
+
+      // Prioridade: Meta Cloud API > WAHA
+      if (metaConfig?.phoneNumberId && metaConfig?.accessToken) {
+        const { sendMetaMessage } = await import('./meta-whatsapp');
+        const result = await sendMetaMessage(metaConfig, phoneDigits, params.body);
+
+        if (!result.success) {
+          throw new Error(result.error ?? 'Meta send failed');
+        }
+
+        return {
+          ok: true,
+          externalMessageId: result.messageId ?? `meta-${Date.now()}`,
+          channel: 'whatsapp',
+        };
+      }
+
+      if (wahaConfig?.baseUrl) {
+        const { sendWahaMessage } = await import('./waha');
+        const result = await sendWahaMessage({ to: phone, body: params.body, wahaConfig });
+
+        return {
+          ok: true,
+          externalMessageId: result.id,
+          channel: 'whatsapp',
+        };
+      }
+
+      throw new Error('WhatsApp not configured for this organization (configure Meta Cloud API or WAHA)');
     }
 
     case 'instagram': {

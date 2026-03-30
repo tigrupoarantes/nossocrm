@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Mail, MessageCircle, Shield, Building2, CheckCircle, XCircle, Loader2, Eye, EyeOff, Smartphone } from 'lucide-react';
+import { Mail, MessageCircle, Shield, Building2, CheckCircle, XCircle, Loader2, Eye, EyeOff, Smartphone, Copy, ExternalLink, Info } from 'lucide-react';
 import { useToast } from '@/context/ToastContext';
 
 // =============================================================================
@@ -18,10 +18,12 @@ interface SmtpForm {
   fromEmail: string;
 }
 
-interface TwilioForm {
-  accountSid: string;
-  authToken: string;
-  fromNumber: string;
+interface MetaWhatsAppForm {
+  phoneNumberId: string;
+  accessToken: string;
+  businessAccountId: string;
+  webhookVerifyToken: string;
+  appSecret: string;
 }
 
 interface SerasaForm {
@@ -52,7 +54,7 @@ interface WahaSessionState {
 
 interface ConfigStatus {
   smtp: boolean;
-  twilio: boolean;
+  metaWhatsApp: boolean;
   serasa: boolean;
   customerBase: boolean;
   waha: boolean;
@@ -135,16 +137,20 @@ export function CommunicationSection() {
   const { addToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [testing, setTesting] = useState<'smtp' | 'twilio' | 'waha' | null>(null);
+  const [testing, setTesting] = useState<'smtp' | 'meta' | 'waha' | null>(null);
 
-  const [status, setStatus] = useState<ConfigStatus>({ smtp: false, twilio: false, serasa: false, customerBase: false, waha: false });
+  const [status, setStatus] = useState<ConfigStatus>({ smtp: false, metaWhatsApp: false, serasa: false, customerBase: false, waha: false });
 
   const [smtp, setSmtp] = useState<SmtpForm>({
     host: '', port: 587, secure: false, user: '', pass: '', fromName: '', fromEmail: '',
   });
 
-  const [twilio, setTwilio] = useState<TwilioForm>({
-    accountSid: '', authToken: '', fromNumber: '',
+  const [meta, setMeta] = useState<MetaWhatsAppForm>({
+    phoneNumberId: '',
+    accessToken: '',
+    businessAccountId: '',
+    webhookVerifyToken: '',
+    appSecret: '',
   });
 
   const [serasa, setSerasa] = useState<SerasaForm>({
@@ -174,8 +180,8 @@ export function CommunicationSection() {
         if (data.smtp) {
           setSmtp(s => ({ ...s, ...data.smtp, pass: '' })); // não pré-preenche senha
         }
-        if (data.twilio) {
-          setTwilio(s => ({ ...s, ...data.twilio, authToken: '' }));
+        if (data.metaWhatsApp) {
+          setMeta(s => ({ ...s, ...data.metaWhatsApp, accessToken: '', appSecret: '' }));
         }
         if (data.serasa) {
           setSerasa(s => ({ ...s, ...data.serasa, clientSecret: '' }));
@@ -259,7 +265,7 @@ export function CommunicationSection() {
       const payload: Record<string, unknown> = {};
 
       if (smtp.host) payload.smtp = smtp;
-      if (twilio.accountSid) payload.twilio = twilio;
+      if (meta.phoneNumberId) payload.metaWhatsApp = meta;
       if (serasa.clientId) payload.serasa = serasa;
       if (customerBase.baseUrl) payload.customerBase = customerBase;
       if (waha.baseUrl) payload.waha = waha;
@@ -277,7 +283,7 @@ export function CommunicationSection() {
       // Atualizar status
       setStatus({
         smtp: !!smtp.host,
-        twilio: !!twilio.accountSid,
+        metaWhatsApp: !!meta.phoneNumberId,
         serasa: !!serasa.clientId,
         customerBase: !!customerBase.baseUrl,
         waha: !!waha.baseUrl,
@@ -307,19 +313,23 @@ export function CommunicationSection() {
     }
   };
 
-  const handleTestTwilio = async () => {
-    setTesting('twilio');
+  const handleTestMeta = async () => {
+    setTesting('meta');
     try {
-      const res = await fetch('/api/settings/communication/test-twilio', {
+      const res = await fetch('/api/settings/communication/test-meta-whatsapp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(twilio),
+        body: JSON.stringify({ phoneNumberId: meta.phoneNumberId, accessToken: meta.accessToken }),
       });
-      const data = await res.json();
-      if (data.ok) addToast('Credenciais Twilio válidas!', 'success');
-      else addToast(`Falha Twilio: ${data.error}`, 'error');
+      const data = await res.json() as { ok: boolean; phoneNumber?: string; displayPhoneNumber?: string; error?: string };
+      if (data.ok) {
+        const label = data.displayPhoneNumber ?? data.phoneNumber ?? 'número verificado';
+        addToast(`Meta API OK — ${label}`, 'success');
+      } else {
+        addToast(`Falha Meta: ${data.error ?? 'Credenciais inválidas'}`, 'error');
+      }
     } catch {
-      addToast('Erro ao testar Twilio', 'error');
+      addToast('Erro ao testar Meta WhatsApp', 'error');
     } finally {
       setTesting(null);
     }
@@ -395,29 +405,105 @@ export function CommunicationSection() {
         </button>
       </ConfigCard>
 
-      {/* Twilio WhatsApp */}
-      <ConfigCard title="WhatsApp (Twilio)" icon={MessageCircle} configured={status.twilio}>
+      {/* Meta WhatsApp Cloud API */}
+      <ConfigCard title="WhatsApp (Meta Cloud API)" icon={MessageCircle} configured={status.metaWhatsApp}>
+        {/* Info banner */}
+        <div className="flex items-start gap-2 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-500/30 rounded-lg text-xs text-blue-800 dark:text-blue-300">
+          <Info className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+          <span>
+            API oficial da Meta — envio direto pelo WhatsApp Business Platform, sem intermediários.{' '}
+            <a
+              href="https://developers.facebook.com/docs/whatsapp/cloud-api/get-started"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline inline-flex items-center gap-0.5"
+            >
+              Documentação <ExternalLink className="h-3 w-3" />
+            </a>
+          </span>
+        </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Field label="Account SID">
-            <input className={INPUT} value={twilio.accountSid} onChange={e => setTwilio(s => ({ ...s, accountSid: e.target.value }))} placeholder="ACxxxxxxxxxxxxxxxx" />
+          <Field label="Phone Number ID">
+            <input
+              className={INPUT}
+              value={meta.phoneNumberId}
+              onChange={e => setMeta(s => ({ ...s, phoneNumberId: e.target.value }))}
+              placeholder="123456789012345"
+            />
+            <p className="text-xs text-slate-400 mt-1">Encontrado em Meta for Developers → WhatsApp → API Setup</p>
           </Field>
-          <Field label="Auth Token">
-            <PasswordField value={twilio.authToken} onChange={v => setTwilio(s => ({ ...s, authToken: v }))} />
+          <Field label="Business Account ID (opcional)">
+            <input
+              className={INPUT}
+              value={meta.businessAccountId}
+              onChange={e => setMeta(s => ({ ...s, businessAccountId: e.target.value }))}
+              placeholder="987654321098765"
+            />
           </Field>
           <div className="sm:col-span-2">
-            <Field label="Número WhatsApp remetente">
-              <input className={INPUT} value={twilio.fromNumber} onChange={e => setTwilio(s => ({ ...s, fromNumber: e.target.value }))} placeholder="+5511999999999" />
-              <p className="text-xs text-slate-400 mt-1">Número aprovado no WhatsApp Business (com DDI)</p>
+            <Field label="Access Token">
+              <PasswordField
+                value={meta.accessToken}
+                onChange={v => setMeta(s => ({ ...s, accessToken: v }))}
+                placeholder="EAAxxxxxxxxxxxxxxxxxxxxxxxx"
+              />
+              <p className="text-xs text-slate-400 mt-1">Token de acesso do sistema gerado em Meta for Developers</p>
             </Field>
           </div>
+          <Field label="App Secret (opcional — para validar webhook)">
+            <PasswordField
+              value={meta.appSecret}
+              onChange={v => setMeta(s => ({ ...s, appSecret: v }))}
+              placeholder="abc123def456..."
+            />
+          </Field>
+          <Field label="Webhook Verify Token">
+            <input
+              className={INPUT}
+              value={meta.webhookVerifyToken}
+              onChange={e => setMeta(s => ({ ...s, webhookVerifyToken: e.target.value }))}
+              placeholder="nossocrm-meta-verify"
+            />
+            <p className="text-xs text-slate-400 mt-1">Token secreto que a Meta usa para verificar o webhook</p>
+          </Field>
         </div>
+
+        {/* Webhook URL (readonly) */}
+        <div>
+          <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
+            URL do Webhook <span className="text-slate-400">(copiar para Meta for Developers)</span>
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              readOnly
+              className={INPUT + ' bg-slate-100 dark:bg-white/10 cursor-default select-all'}
+              value="https://crm.grupoarantes.emp.br/api/webhooks/meta-whatsapp"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                void navigator.clipboard.writeText('https://crm.grupoarantes.emp.br/api/webhooks/meta-whatsapp');
+                addToast('URL copiada!', 'success');
+              }}
+              className="flex-shrink-0 p-2 text-slate-500 hover:text-primary-600 border border-slate-200 dark:border-white/10 rounded-lg hover:bg-slate-50 dark:hover:bg-white/5 transition-colors"
+              title="Copiar URL"
+            >
+              <Copy className="h-4 w-4" />
+            </button>
+          </div>
+          <p className="text-xs text-slate-400 mt-1">
+            Configure em Meta for Developers → WhatsApp → Configuration → Webhook. Inscreva o campo <code className="bg-slate-100 dark:bg-white/10 px-1 rounded">messages</code>.
+          </p>
+        </div>
+
         <button
-          onClick={handleTestTwilio}
-          disabled={!twilio.accountSid || testing === 'twilio'}
-          className="mt-2 flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-primary-600 dark:text-primary-400 border border-primary-200 dark:border-primary-800 rounded-lg hover:bg-primary-50 dark:hover:bg-primary-900/20 disabled:opacity-50 transition-colors"
+          onClick={handleTestMeta}
+          disabled={!meta.phoneNumberId || !meta.accessToken || testing === 'meta'}
+          className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-primary-600 dark:text-primary-400 border border-primary-200 dark:border-primary-800 rounded-lg hover:bg-primary-50 dark:hover:bg-primary-900/20 disabled:opacity-50 transition-colors"
         >
-          {testing === 'twilio' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-          Testar credenciais Twilio
+          {testing === 'meta' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+          Testar credenciais Meta
         </button>
       </ConfigCard>
 
@@ -546,7 +632,7 @@ export function CommunicationSection() {
           </div>
         )}
         <p className="text-xs text-slate-400 mt-2">
-          Gateway WhatsApp self-hosted. Alternativa ao Twilio — sem custo por mensagem. Requer Docker.
+          Gateway WhatsApp self-hosted. Alternativa à Meta Cloud API — sem custo por mensagem. Requer Docker.
         </p>
       </ConfigCard>
 

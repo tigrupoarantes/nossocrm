@@ -44,12 +44,21 @@ const WahaSchema = z.object({
   sessionName: z.string().min(1).default('default'),
 }).nullable();
 
+const MetaWhatsAppSchema = z.object({
+  phoneNumberId: z.string().min(1),
+  accessToken: z.string().min(1),
+  businessAccountId: z.string().optional(),
+  webhookVerifyToken: z.string().optional(),
+  appSecret: z.string().optional(),
+}).nullable();
+
 const PutSchema = z.object({
   smtp: SmtpSchema.optional(),
   twilio: TwilioSchema.optional(),
   serasa: SerasaSchema.optional(),
   customerBase: CustomerBaseSchema.optional(),
   waha: WahaSchema.optional(),
+  metaWhatsApp: MetaWhatsAppSchema.optional(),
 });
 
 // =============================================================================
@@ -73,7 +82,7 @@ export async function GET() {
 
   const { data: settings } = await supabase
     .from('organization_settings')
-    .select('smtp_config, twilio_config, serasa_config, customer_base_config, waha_config')
+    .select('smtp_config, twilio_config, serasa_config, customer_base_config, waha_config, meta_whatsapp_config')
     .eq('organization_id', profile.organization_id)
     .single();
 
@@ -82,6 +91,7 @@ export async function GET() {
   const serasa = (settings as any)?.serasa_config ?? null;
   const customerBase = (settings as any)?.customer_base_config ?? null;
   const waha = (settings as any)?.waha_config ?? null;
+  const metaWhatsApp = (settings as any)?.meta_whatsapp_config ?? null;
 
   // Mascarar campos sensíveis antes de retornar
   return NextResponse.json({
@@ -90,12 +100,14 @@ export async function GET() {
     serasa: serasa ? { ...serasa, clientSecret: serasa.clientSecret ? '••••••••' : '' } : null,
     customerBase: customerBase ? { ...customerBase, apiKey: customerBase.apiKey ? '••••••••' : '' } : null,
     waha: waha ? { ...waha, apiKey: waha.apiKey ? '••••••••' : '' } : null,
+    metaWhatsApp: metaWhatsApp ? { ...metaWhatsApp, accessToken: metaWhatsApp.accessToken ? '••••••••' : '', appSecret: metaWhatsApp.appSecret ? '••••••••' : '' } : null,
     configured: {
       smtp: !!(smtp?.host),
       twilio: !!(twilio?.accountSid),
       serasa: !!(serasa?.clientId),
       customerBase: !!(customerBase?.baseUrl),
       waha: !!(waha?.baseUrl),
+      metaWhatsApp: !!(metaWhatsApp?.phoneNumberId),
     },
   });
 }
@@ -186,6 +198,26 @@ export async function PUT(request: Request) {
       parsed.data.waha.apiKey = (existing as any)?.waha_config?.apiKey ?? '';
     }
     updates.waha_config = parsed.data.waha;
+  }
+
+  if (parsed.data.metaWhatsApp !== undefined) {
+    if (parsed.data.metaWhatsApp?.accessToken === '••••••••') {
+      const { data: existing } = await supabase
+        .from('organization_settings')
+        .select('meta_whatsapp_config')
+        .eq('organization_id', profile.organization_id)
+        .single();
+      parsed.data.metaWhatsApp.accessToken = (existing as any)?.meta_whatsapp_config?.accessToken ?? '';
+    }
+    if (parsed.data.metaWhatsApp?.appSecret === '••••••••') {
+      const { data: existing } = await supabase
+        .from('organization_settings')
+        .select('meta_whatsapp_config')
+        .eq('organization_id', profile.organization_id)
+        .single();
+      parsed.data.metaWhatsApp.appSecret = (existing as any)?.meta_whatsapp_config?.appSecret ?? '';
+    }
+    updates.meta_whatsapp_config = parsed.data.metaWhatsApp;
   }
 
   const { error } = await supabase
