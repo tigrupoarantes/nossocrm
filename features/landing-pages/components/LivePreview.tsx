@@ -16,10 +16,11 @@ function injectEditorScript(html: string): string {
 (function() {
   var banner = document.createElement('div');
   banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#4f46e5;color:white;text-align:center;padding:8px 16px;font-size:13px;font-family:sans-serif;font-weight:500;box-shadow:0 2px 8px rgba(0,0,0,0.2);';
-  banner.textContent = '\\u270f\\ufe0f Modo edi\\u00e7\\u00e3o \\u2014 clique em qualquer texto para editar';
+  banner.textContent = '\\u270f\\ufe0f Modo edi\\u00e7\\u00e3o \\u2014 clique em textos para editar, clique em imagens para trocar';
   document.body.prepend(banner);
   document.body.style.paddingTop = '40px';
 
+  // --- Textos editáveis ---
   var sel = 'h1,h2,h3,h4,h5,h6,p,span,a,li,button,td,th,label,strong,em,blockquote';
   document.querySelectorAll(sel).forEach(function(el) {
     if (el.closest('script,style')) return;
@@ -32,9 +33,46 @@ function injectEditorScript(html: string): string {
     el.addEventListener('blur', function() { el.style.outline = ''; el.style.background = ''; });
   });
 
+  // --- Imagens editáveis ---
+  document.querySelectorAll('img').forEach(function(img) {
+    if (img.closest('script,style')) return;
+    var wrapper = img.parentElement;
+    if (!wrapper) return;
+    wrapper.style.position = wrapper.style.position || 'relative';
+
+    var overlay = document.createElement('div');
+    overlay.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.5);opacity:0;transition:opacity 0.2s;cursor:pointer;z-index:10;border-radius:inherit;';
+    overlay.innerHTML = '<div style="background:white;color:#4f46e5;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;font-family:sans-serif;box-shadow:0 2px 8px rgba(0,0,0,0.3);">\\ud83d\\uddbc\\ufe0f Trocar imagem</div>';
+
+    wrapper.addEventListener('mouseenter', function() { overlay.style.opacity = '1'; });
+    wrapper.addEventListener('mouseleave', function() { overlay.style.opacity = '0'; });
+
+    overlay.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      var url = window.prompt('URL da nova imagem:', img.src);
+      if (url && url.trim()) {
+        img.src = url.trim();
+        notify();
+      }
+    });
+
+    wrapper.appendChild(overlay);
+  });
+
   document.addEventListener('click', function(e) {
     if (e.target.closest('a')) e.preventDefault();
   });
+
+  function notify() {
+    clearTimeout(notify._t);
+    notify._t = setTimeout(function() {
+      // Remove overlays antes de capturar HTML
+      var overlays = document.querySelectorAll('[data-crm-overlay]');
+      overlays.forEach(function(o) { o.remove(); });
+      window.parent.postMessage({ type: 'crm-lp-edit', html: document.documentElement.outerHTML }, '*');
+    }, 400);
+  }
 
   var timer;
   document.addEventListener('input', function() {

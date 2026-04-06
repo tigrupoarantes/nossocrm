@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft, Globe, Save, Loader2, Send, Sparkles,
-  BarChart3, CheckCircle2, AlertCircle, Target,
+  BarChart3, CheckCircle2, AlertCircle, Target, ExternalLink, ImagePlus,
 } from 'lucide-react';
 import { useLandingPage, useCreateLandingPage, useUpdateLandingPage } from '../hooks/useLandingPages';
 import { useGeneratePage } from '../hooks/useGeneratePage';
@@ -307,6 +307,18 @@ export function LandingPageBuilder({ landingPageId }: LandingPageBuilderProps) {
           <span className="hidden sm:inline">Salvar</span>
         </button>
 
+        {currentStatus === 'published' && slug && (
+          <a
+            href={`/p/${slug}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium transition-colors shrink-0"
+          >
+            <ExternalLink size={14} />
+            <span className="hidden sm:inline">Abrir LP</span>
+          </a>
+        )}
+
         <button
           onClick={() => setShowPublishDialog(true)}
           disabled={!currentId}
@@ -314,7 +326,7 @@ export function LandingPageBuilder({ landingPageId }: LandingPageBuilderProps) {
         >
           <Globe size={14} />
           <span className="hidden sm:inline">
-            {currentStatus === 'published' ? 'Ver publicada' : 'Publicar'}
+            {currentStatus === 'published' ? 'Configurar' : 'Publicar'}
           </span>
         </button>
       </div>
@@ -463,18 +475,36 @@ export function LandingPageBuilder({ landingPageId }: LandingPageBuilderProps) {
                   : 'Descreva sua landing page...'}
                 rows={3}
                 disabled={isGenerating}
-                className="w-full px-3 py-2.5 pr-10 text-sm bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none disabled:opacity-50"
+                className="w-full px-3 py-2.5 pr-20 text-sm bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none disabled:opacity-50"
               />
-              <button
-                onClick={handleSubmit}
-                disabled={isGenerating || !inputValue.trim()}
-                className="absolute right-2 bottom-2.5 p-1.5 rounded-lg bg-primary-600 hover:bg-primary-700 disabled:opacity-40 text-white transition-colors"
-                title="Enviar (Enter)"
-              >
-                {isGenerating
-                  ? <Loader2 size={14} className="animate-spin" />
-                  : <Send size={14} />}
-              </button>
+              <div className="absolute right-2 bottom-2.5 flex items-center gap-1">
+                <button
+                  onClick={() => {
+                    const url = window.prompt('Cole a URL da imagem que deseja usar na landing page:');
+                    if (url?.trim()) {
+                      setInputValue(prev => {
+                        const prefix = prev.trim() ? prev.trim() + '\n' : '';
+                        return prefix + `Use esta imagem na página: ${url.trim()}`;
+                      });
+                    }
+                  }}
+                  disabled={isGenerating}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-slate-100 dark:hover:bg-white/5 disabled:opacity-40 transition-colors"
+                  title="Anexar imagem (URL)"
+                >
+                  <ImagePlus size={14} />
+                </button>
+                <button
+                  onClick={handleSubmit}
+                  disabled={isGenerating || !inputValue.trim()}
+                  className="p-1.5 rounded-lg bg-primary-600 hover:bg-primary-700 disabled:opacity-40 text-white transition-colors"
+                  title="Enviar (Enter)"
+                >
+                  {isGenerating
+                    ? <Loader2 size={14} className="animate-spin" />
+                    : <Send size={14} />}
+                </button>
+              </div>
             </div>
           </div>
 

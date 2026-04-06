@@ -2,7 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { Users, Loader2, ExternalLink } from 'lucide-react';
+import { Users, Loader2, ExternalLink, Download } from 'lucide-react';
 import { useLandingPageSubmissions } from '../hooks/useLandingPages';
 
 interface SubmissionsListProps {
@@ -38,6 +38,14 @@ export function SubmissionsList({ landingPageId }: SubmissionsListProps) {
         <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
           Leads Capturados <span className="text-slate-400">({data?.totalCount})</span>
         </h3>
+        <a
+          href={`/api/landing-pages/${landingPageId}/submissions/export`}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-white/10 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors"
+          download
+        >
+          <Download size={12} />
+          Exportar CSV
+        </a>
       </div>
 
       <div className="divide-y divide-slate-100 dark:divide-white/5">

@@ -14,6 +14,8 @@ interface CreateDealModalProps {
     activeBoard?: Board | null;
     /** O ID do board ativo - passado pelo controller do Kanban */
     activeBoardId?: string;
+    /** Se informado, cria o deal neste stage em vez do primeiro do board */
+    initialStageId?: string;
 }
 
 /**
@@ -24,7 +26,8 @@ export const CreateDealModal: React.FC<CreateDealModalProps> = ({
     isOpen,
     onClose,
     activeBoard: propActiveBoard,
-    activeBoardId: propActiveBoardId
+    activeBoardId: propActiveBoardId,
+    initialStageId,
 }) => {
     const { addDeal, activeBoard: contextActiveBoard, activeBoardId: contextActiveBoardId } = useCRM();
     const { profile, user } = useAuth();
@@ -124,8 +127,10 @@ export const CreateDealModal: React.FC<CreateDealModalProps> = ({
         setIsSubmitting(true);
 
         try {
-            // Usa o primeiro estágio do board ativo
-            const firstStage = activeBoard.stages[0];
+            // Usa o stage informado (se veio do "+") ou o primeiro do board
+            const firstStage = (initialStageId
+              ? activeBoard.stages.find(s => s.id === initialStageId)
+              : null) ?? activeBoard.stages[0];
 
             const ownerName = profile?.nickname ||
                 profile?.first_name ||

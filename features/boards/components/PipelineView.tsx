@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { DealDetailModal } from './Modals/DealDetailModal';
 import { CreateDealModal } from './Modals/CreateDealModal';
 import { CreateBoardModal } from './Modals/CreateBoardModal';
@@ -246,6 +246,7 @@ export const PipelineView: React.FC<PipelineViewProps> = ({
   const { profile } = useAuth();
   const isAdmin = profile?.role === 'admin';
   const [isExportModalOpen, setIsExportModalOpen] = React.useState(false);
+  const [createDealStageId, setCreateDealStageId] = useState<string | undefined>(undefined);
 
   const handleUpdateStage = (updatedStage: BoardStage) => {
     if (!activeBoard) return;
@@ -325,7 +326,7 @@ export const PipelineView: React.FC<PipelineViewProps> = ({
             setOwnerFilter={setOwnerFilter}
             statusFilter={statusFilter}
             setStatusFilter={setStatusFilter}
-            onNewDeal={() => setIsCreateModalOpen(true)}
+            onNewDeal={() => { setCreateDealStageId(undefined); setIsCreateModalOpen(true); }}
           />
 
           <BoardStrategyHeader board={activeBoard} />
@@ -345,6 +346,10 @@ export const PipelineView: React.FC<PipelineViewProps> = ({
                 handleQuickAddActivity={handleQuickAddActivity}
                 setLastMouseDownDealId={setLastMouseDownDealId}
                 onMoveDealToStage={handleMoveDealToStage}
+                onNewDealInStage={(stageId) => {
+                  setCreateDealStageId(stageId);
+                  setIsCreateModalOpen(true);
+                }}
               />
             ) : (
               <KanbanList
@@ -364,9 +369,10 @@ export const PipelineView: React.FC<PipelineViewProps> = ({
 
       <CreateDealModal
         isOpen={isCreateModalOpen}
-        onClose={() => setIsCreateModalOpen(false)}
+        onClose={() => { setIsCreateModalOpen(false); setCreateDealStageId(undefined); }}
         activeBoard={activeBoard}
         activeBoardId={activeBoardId ?? undefined}
+        initialStageId={createDealStageId}
       />
 
       <DealDetailModal

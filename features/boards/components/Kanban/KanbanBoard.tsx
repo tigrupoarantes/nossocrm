@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
+import { Plus } from 'lucide-react';
 import { DealView, BoardStage } from '@/types';
 import { DealCard } from './DealCard';
 import { isDealRotting, getActivityStatus } from '@/features/boards/hooks/useBoardsController';
@@ -66,6 +67,8 @@ interface KanbanBoardProps {
   setLastMouseDownDealId: (id: string | null) => void;
   /** Callback to move a deal to a new stage (for keyboard accessibility) */
   onMoveDealToStage?: (dealId: string, newStageId: string) => void;
+  /** Callback to create a new deal in a specific stage (triggered by "+" button) */
+  onNewDealInStage?: (stageId: string) => void;
 }
 /**
  * Componente React `KanbanBoard`.
@@ -112,6 +115,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   handleQuickAddActivity,
   setLastMouseDownDealId,
   onMoveDealToStage,
+  onNewDealInStage,
 }) => {
   const { lifecycleStages } = useCRM();
   const [dragOverStage, setDragOverStage] = useState<string | null>(null);
@@ -289,6 +293,19 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                 />
               ))}
             </div>
+
+            {/* Botão "+" para criar deal direto neste stage */}
+            {onNewDealInStage && (
+              <div className="p-2 border-t border-slate-200/50 dark:border-white/5 shrink-0">
+                <button
+                  onClick={() => onNewDealInStage(stage.id)}
+                  className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
+                >
+                  <Plus size={14} />
+                  Novo negócio
+                </button>
+              </div>
+            )}
           </div>
         );
       })}

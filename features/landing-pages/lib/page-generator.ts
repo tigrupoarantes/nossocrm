@@ -13,7 +13,7 @@ REGRAS TÉCNICAS OBRIGATÓRIAS:
 2. Tailwind CSS via CDN: <script src="https://cdn.tailwindcss.com"></script>
 3. Google Fonts via <link> no <head>
 4. Mobile-first, 100% responsivo (testar em 375px e 1440px)
-5. Imagens: usar URLs do Unsplash (https://images.unsplash.com/...)
+5. Imagens: se o usuário fornecer URLs de imagens, use-as no HTML. Caso contrário, use URLs do Unsplash (https://images.unsplash.com/...)
 6. Formulário de captura pré-configurado (ver FORMULÁRIO abaixo)
 7. Retornar APENAS o HTML, sem markdown, sem explicações, sem code fences
 
