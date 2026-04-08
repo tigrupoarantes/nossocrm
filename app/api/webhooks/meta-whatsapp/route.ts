@@ -320,12 +320,50 @@ async function applyStatusUpdate(
 export async function POST(request: Request) {
   const webhookBody = await request.json().catch(() => ({})) as MetaWebhookBody
 
-  // Ignorar eventos que não são do WhatsApp Business Account
-  if (webhookBody.object !== 'whatsapp_business_account') {
-    return NextResponse.json({ ok: true, ignored: true })
+  const supabase = createStaticAdminClient()
+
+  // Acumulador de resultado para registrar no webhook_logs no final.
+  const result: {
+    object: string | null
+    statusUpdates: number
+    inboundProcessed: number
+    inboundDropped: number
+    droppedReasons: string[]
+    errors: string[]
+    organizationIds: string[]
+  } = {
+    object: webhookBody.object ?? null,
+    statusUpdates: 0,
+    inboundProcessed: 0,
+    inboundDropped: 0,
+    droppedReasons: [],
+    errors: [],
+    organizationIds: [],
   }
 
-  const supabase = createStaticAdminClient()
+  // Helper para SEMPRE gravar o log (chamado em todos os return paths).
+  const writeLog = async (statusCode: number, errorMessage?: string) => {
+    try {
+      await supabase.from('webhook_logs').insert({
+        organization_id: result.organizationIds[0] ?? null,
+        source: 'meta-whatsapp',
+        method: 'POST',
+        status_code: statusCode,
+        payload: webhookBody as unknown as Record<string, unknown>,
+        result: result as unknown as Record<string, unknown>,
+        error_message: errorMessage ?? null,
+      })
+    } catch (e) {
+      console.error('[MetaWebhook] failed to write webhook_log', e)
+    }
+  }
+
+  // Ignorar eventos que não são do WhatsApp Business Account
+  if (webhookBody.object !== 'whatsapp_business_account') {
+    result.droppedReasons.push('object_not_whatsapp_business_account')
+    await writeLog(200, 'object != whatsapp_business_account')
+    return NextResponse.json({ ok: true, ignored: true })
+  }
 
   console.log('[MetaWebhook] POST received', {
     entries: webhookBody.entry?.length ?? 0,
@@ -350,6 +388,7 @@ export async function POST(request: Request) {
             externalMessageId: status.id,
             status: status.status,
           })
+          result.statusUpdates += 1
         }
       }
 
@@ -371,13 +410,21 @@ export async function POST(request: Request) {
           phoneNumberId,
           messageCount: messages.length,
         })
+        result.inboundDropped += messages.length
+        result.droppedReasons.push(`no_org_for_phone_number_id:${phoneNumberId ?? 'null'}`)
         continue
+      }
+
+      if (!result.organizationIds.includes(organizationId)) {
+        result.organizationIds.push(organizationId)
       }
 
       for (const message of messages) {
         // Por enquanto só processamos texto. Mídia entra na próxima rodada.
         if (message.type !== 'text' || !message.text?.body) {
           console.log('[MetaWebhook] skipping non-text message', { type: message.type, id: message.id })
+          result.inboundDropped += 1
+          result.droppedReasons.push(`unsupported_type:${message.type}`)
           continue
         }
 
@@ -387,7 +434,11 @@ export async function POST(request: Request) {
         const timestamp = parseInt(message.timestamp, 10)
         const sentAt = new Date(timestamp * 1000).toISOString()
 
-        if (!fromRaw) continue
+        if (!fromRaw) {
+          result.inboundDropped += 1
+          result.droppedReasons.push('missing_from')
+          continue
+        }
 
         const normalizedPhone = normalizeMetaPhone(fromRaw)
 
@@ -409,6 +460,9 @@ export async function POST(request: Request) {
 
         if (!conversationId) {
           console.error('[MetaWebhook] persist failed', { phone: normalizedPhone, messageId })
+          result.inboundDropped += 1
+          result.droppedReasons.push('persist_failed')
+          result.errors.push(`persist failed for ${normalizedPhone}/${messageId}`)
           continue
         }
 
@@ -418,6 +472,8 @@ export async function POST(request: Request) {
           dealId: dealMatch?.dealId ?? null,
           phone: normalizedPhone,
         })
+
+        result.inboundProcessed += 1
 
         // Automação só dispara se houver deal vinculado.
         if (dealMatch) {
@@ -434,6 +490,8 @@ export async function POST(request: Request) {
       }
     }
   }
+
+  await writeLog(200)
 
   return NextResponse.json({ ok: true })
 }
