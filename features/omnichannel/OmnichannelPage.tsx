@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import { MessageSquare, Search, Phone, Bot, UserCheck, X, RotateCcw, Lock } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { useRealtimeSync } from '@/lib/realtime/useRealtimeSync';
 import {
   useConversations,
   useMessages,
@@ -410,6 +411,12 @@ function EmptyConversationState() {
 export function OmnichannelPage() {
   const { user } = useAuth();
   const currentUserId = user?.id;
+
+  // Realtime: assina mudanças em messages e conversations da org. Quando
+  // chega INSERT/UPDATE, o hook invalida ['messages'] e ['conversations']
+  // automaticamente — bolha do lead aparece sem refresh, ticks atualizam
+  // sozinhos quando a Meta confirma delivered/read.
+  useRealtimeSync(['messages', 'conversations']);
 
   const [activeTab, setActiveTab] = useState<ConversationStatus | 'all'>('em_espera');
   const [selectedId, setSelectedId] = useState<string | null>(null);

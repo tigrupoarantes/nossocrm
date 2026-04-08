@@ -36,7 +36,7 @@ export function ConversationThread({ messages, loading = false }: ConversationTh
   }
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 bg-slate-50 dark:bg-black/10 space-y-0.5">
+    <div className="flex-1 overflow-y-auto p-4 space-y-0.5 bg-[#efeae2] dark:bg-[#0b141a] bg-dots">
       {messages.map(msg => (
         <MessageBubble key={msg.id} message={msg} showChannelBadge={true} />
       ))}
