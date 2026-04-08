@@ -13,7 +13,10 @@
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { findAnyMetaConfigForOrg } from '@/lib/communication/meta-config-resolver';
+import {
+  findAnyMetaConfigForOrg,
+  findAnyWahaConfigForOrg,
+} from '@/lib/communication/meta-config-resolver';
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -33,76 +36,146 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  // Buscar o phoneNumberId configurado da org. Olha em ambos lugares:
-  // organization_settings (single-tenant) E business_unit_channel_settings
-  // (Multi-BU). Sem isso, orgs Multi-BU sempre falham aqui.
-  const resolved = await findAnyMetaConfigForOrg(supabase, profile.organization_id);
+  const body = (await request.json().catch(() => ({}))) as {
+    phone?: string;
+    message?: string;
+    source?: 'meta' | 'waha' | 'auto';
+  };
 
-  if (!resolved?.phoneNumberId) {
+  const phone = (body.phone ?? '5511999999999').replace(/\D/g, '');
+  const text = body.message ?? `Mensagem de teste do simulador — ${new Date().toLocaleString('pt-BR')}`;
+  const sourceMode = body.source ?? 'auto';
+
+  // Detecta automaticamente qual provider a org usa, ou força um se passado.
+  let provider: 'meta' | 'waha' | null = null;
+
+  if (sourceMode === 'meta') provider = 'meta';
+  else if (sourceMode === 'waha') provider = 'waha';
+  else {
+    // auto: tenta meta primeiro, depois WAHA
+    const metaCfg = await findAnyMetaConfigForOrg(supabase, profile.organization_id);
+    if (metaCfg?.phoneNumberId) {
+      provider = 'meta';
+    } else {
+      const wahaCfg = await findAnyWahaConfigForOrg(supabase, profile.organization_id);
+      if (wahaCfg?.sessionName) provider = 'waha';
+    }
+  }
+
+  if (!provider) {
     return NextResponse.json(
       {
-        error: 'Meta WhatsApp não configurado para esta organização',
-        hint: 'Configure o Phone Number ID em Configurações → Comunicação → Meta WhatsApp OU em uma Business Unit ativa (Configurações → Unidades de Negócio → Canais).',
+        error: 'Nenhum provider WhatsApp configurado para esta organização',
+        hint: 'Configure Meta WhatsApp ou WAHA em Configurações → Comunicação.',
       },
       { status: 422 },
     );
   }
 
-  const body = (await request.json().catch(() => ({}))) as {
-    phone?: string;
-    message?: string;
-  };
+  // ============================================================
+  // Simulador META
+  // ============================================================
+  if (provider === 'meta') {
+    const resolved = await findAnyMetaConfigForOrg(supabase, profile.organization_id);
+    if (!resolved?.phoneNumberId) {
+      return NextResponse.json(
+        { error: 'Meta WhatsApp não configurado', hint: 'Vá em Configurações → Comunicação → Meta WhatsApp.' },
+        { status: 422 },
+      );
+    }
 
-  const phone = (body.phone ?? '5511999999999').replace(/\D/g, '');
-  const text = body.message ?? `Mensagem de teste do simulador — ${new Date().toLocaleString('pt-BR')}`;
-  const fakeMessageId = `wamid.SIMULATED_${Date.now()}`;
-
-  const fakePayload = {
-    object: 'whatsapp_business_account',
-    entry: [
-      {
-        id: 'simulated-entry',
-        changes: [
-          {
-            field: 'messages',
-            value: {
-              messaging_product: 'whatsapp',
-              metadata: {
-                display_phone_number: 'simulated',
-                phone_number_id: resolved.phoneNumberId,
-              },
-              contacts: [{ profile: { name: 'Simulador' }, wa_id: phone }],
-              messages: [
-                {
-                  from: phone,
-                  id: fakeMessageId,
-                  timestamp: String(Math.floor(Date.now() / 1000)),
-                  type: 'text',
-                  text: { body: text },
+    const fakeMessageId = `wamid.SIMULATED_${Date.now()}`;
+    const fakePayload = {
+      object: 'whatsapp_business_account',
+      entry: [
+        {
+          id: 'simulated-entry',
+          changes: [
+            {
+              field: 'messages',
+              value: {
+                messaging_product: 'whatsapp',
+                metadata: {
+                  display_phone_number: 'simulated',
+                  phone_number_id: resolved.phoneNumberId,
                 },
-              ],
+                contacts: [{ profile: { name: 'Simulador' }, wa_id: phone }],
+                messages: [
+                  {
+                    from: phone,
+                    id: fakeMessageId,
+                    timestamp: String(Math.floor(Date.now() / 1000)),
+                    type: 'text',
+                    text: { body: text },
+                  },
+                ],
+              },
             },
-          },
-        ],
-      },
-    ],
+          ],
+        },
+      ],
+    };
+
+    const url = new URL('/api/webhooks/meta-whatsapp', request.url);
+    const res = await fetch(url.toString(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(fakePayload),
+    }).catch((e) => ({ ok: false, status: 0, error: String(e) } as const));
+
+    return NextResponse.json({
+      ok: 'status' in res ? res.ok : false,
+      webhookStatus: 'status' in res ? res.status : 0,
+      provider: 'meta',
+      resolvedFrom: resolved.source,
+      businessUnitId: resolved.businessUnitId,
+      fakeMessageId,
+      note: `Meta webhook disparado (phoneNumberId via ${resolved.source}). Veja o novo log abaixo.`,
+    });
+  }
+
+  // ============================================================
+  // Simulador WAHA
+  // ============================================================
+  const resolved = await findAnyWahaConfigForOrg(supabase, profile.organization_id);
+  if (!resolved?.sessionName) {
+    return NextResponse.json(
+      { error: 'WAHA não configurado', hint: 'Vá em Configurações → Comunicação → WAHA.' },
+      { status: 422 },
+    );
+  }
+
+  const fakeMessageId = `WAHA_SIMULATED_${Date.now()}`;
+  const fakePayload = {
+    event: 'message',
+    session: resolved.sessionName,
+    payload: {
+      id: fakeMessageId,
+      from: `${phone}@c.us`,
+      body: text,
+      fromMe: false,
+      hasMedia: false,
+      timestamp: Math.floor(Date.now() / 1000),
+    },
   };
 
-  // Disparar o próprio webhook usando fetch interno (mesma origem)
-  const url = new URL('/api/webhooks/meta-whatsapp', request.url);
+  const url = new URL('/api/webhooks/waha', request.url);
   const res = await fetch(url.toString(), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(process.env.WAHA_WEBHOOK_SECRET ? { 'x-waha-secret': process.env.WAHA_WEBHOOK_SECRET } : {}),
+    },
     body: JSON.stringify(fakePayload),
   }).catch((e) => ({ ok: false, status: 0, error: String(e) } as const));
 
   return NextResponse.json({
     ok: 'status' in res ? res.ok : false,
     webhookStatus: 'status' in res ? res.status : 0,
-    payloadSent: fakePayload,
-    fakeMessageId,
+    provider: 'waha',
     resolvedFrom: resolved.source,
-    businessUnitId: resolved.businessUnitId,
-    note: `Webhook disparado usando phoneNumberId resolvido de ${resolved.source}. Veja o novo log abaixo em segundos.`,
+    sessionName: resolved.sessionName,
+    fakeMessageId,
+    note: `WAHA webhook disparado (session=${resolved.sessionName}). Veja o novo log abaixo.`,
   });
 }

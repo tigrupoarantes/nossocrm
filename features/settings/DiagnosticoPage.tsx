@@ -144,11 +144,14 @@ export function DiagnosticoPage() {
   const queryClient = useQueryClient();
   const [phone, setPhone] = useState('');
   const [message, setMessage] = useState('Mensagem de teste do simulador');
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'meta-whatsapp' | 'waha'>('all');
 
   const { data: logs = [], isLoading, refetch, isFetching } = useQuery<WebhookLog[]>({
-    queryKey: ['webhook-logs', 'meta-whatsapp'],
+    queryKey: ['webhook-logs', sourceFilter],
     queryFn: async () => {
-      const res = await fetch('/api/settings/webhook-logs?source=meta-whatsapp&limit=50');
+      const params = new URLSearchParams({ limit: '50' });
+      if (sourceFilter !== 'all') params.set('source', sourceFilter);
+      const res = await fetch(`/api/settings/webhook-logs?${params.toString()}`);
       if (!res.ok) throw new Error(`Failed: ${res.status}`);
       const data = await res.json() as { data: WebhookLog[] };
       return data.data ?? [];
@@ -177,8 +180,9 @@ export function DiagnosticoPage() {
       <div>
         <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Diagnóstico de Webhooks</h1>
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-          Toda chegada do webhook Meta WhatsApp aparece aqui em até 5 segundos. Se a Meta está mandando mensagens
-          mas a tela /omnichannel não está atualizando, este é o lugar para descobrir o motivo.
+          Toda chegada de webhook (Meta WhatsApp Cloud API ou WAHA) aparece aqui em até 5 segundos.
+          Se mensagens estão chegando no seu WhatsApp mas a tela /omnichannel não está atualizando,
+          este é o lugar para descobrir o motivo.
         </p>
       </div>
 
@@ -188,8 +192,9 @@ export function DiagnosticoPage() {
           Simular mensagem inbound
         </h2>
         <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
-          Dispara uma mensagem fake no formato exato da Meta. Se isso processar mas a Meta real não, o problema é
-          na configuração do webhook na Meta for Developers (não no nosso código).
+          Dispara uma mensagem fake no formato exato do provider configurado (detecta automaticamente
+          Meta ou WAHA). Se o simulador funciona mas mensagens reais não chegam, o problema é na
+          configuração do webhook do lado do provider (URL apontando errado, secret divergente, etc.).
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
           <div>
@@ -239,18 +244,34 @@ export function DiagnosticoPage() {
 
       {/* Lista de logs */}
       <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-dark-card overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 dark:border-white/10">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 dark:border-white/10 flex-wrap gap-3">
           <h2 className="text-base font-semibold text-slate-900 dark:text-white">
-            Últimas chegadas Meta WhatsApp
+            Últimas chegadas de webhooks
           </h2>
-          <button
-            type="button"
-            onClick={() => void refetch()}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/10 rounded-lg transition-colors"
-          >
-            <RefreshCw size={12} className={isFetching ? 'animate-spin' : ''} />
-            Atualizar
-          </button>
+          <div className="flex items-center gap-2">
+            {(['all', 'meta-whatsapp', 'waha'] as const).map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setSourceFilter(s)}
+                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                  sourceFilter === s
+                    ? 'bg-primary-500/15 text-primary-600 dark:text-primary-400 border border-primary-500/30'
+                    : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5'
+                }`}
+              >
+                {s === 'all' ? 'Todos' : s}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => void refetch()}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/10 rounded-lg transition-colors"
+            >
+              <RefreshCw size={12} className={isFetching ? 'animate-spin' : ''} />
+              Atualizar
+            </button>
+          </div>
         </div>
         {isLoading ? (
           <div className="p-8 text-center text-sm text-slate-400">Carregando...</div>

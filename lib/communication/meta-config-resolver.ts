@@ -1,17 +1,15 @@
 /**
- * Resolve a configuração Meta WhatsApp Cloud API de uma organização a
- * partir do phone_number_id que a Meta envia no webhook.
+ * Resolvers de configuração de WhatsApp (Meta Cloud API + WAHA).
  *
- * O NossoCRM tem DOIS lugares onde a config pode estar:
+ * Cada provider de inbound/outbound chega com um identificador diferente
+ * que precisa ser mapeado para uma organização do CRM:
  *
- *   (A) organization_settings.meta_whatsapp_config (single-tenant clássico)
- *   (B) business_unit_channel_settings (multi-BU — quando a org tem várias
- *       unidades de negócio, cada uma com seu próprio número Meta)
+ *   - Meta Cloud API: phone_number_id no payload do webhook
+ *   - WAHA:           session name no payload do webhook
  *
- * Esta função olha em AMBOS, retornando a primeira config encontrada cujo
- * phoneNumberId bate com o que a Meta enviou. Sem isso, o webhook inbound
- * dropa mensagens de orgs Multi-BU e o simulador retorna erro mesmo
- * quando o outbound funciona normalmente.
+ * Estas funções centralizam essa resolução, olhando em ambos os lugares
+ * onde a config pode estar (organization_settings ou
+ * business_unit_channel_settings para orgs Multi-BU).
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -126,6 +124,128 @@ export async function findAnyMetaConfigForOrg(
         businessUnitId: row.business_unit_id as string,
         phoneNumberId: cfg.phoneNumberId,
         accessToken: cfg.accessToken,
+        source: 'business_unit_channel_settings',
+      }
+    }
+  }
+
+  return null
+}
+
+// =============================================================================
+// WAHA resolvers
+// =============================================================================
+
+export interface ResolvedWahaConfig {
+  organizationId: string
+  sessionName: string
+  baseUrl?: string
+  apiKey?: string
+  source: 'organization_settings' | 'business_unit_channel_settings'
+}
+
+/**
+ * Resolve a organização dona desta sessão WAHA. O webhook do WAHA envia
+ * `session: 'Whats_CRM'` no payload, e o `waha_config.sessionName` no
+ * banco bate com isso.
+ */
+export async function resolveWahaConfigBySession(
+  supabase: SupabaseClient,
+  sessionName: string | null | undefined,
+): Promise<ResolvedWahaConfig | null> {
+  if (!sessionName) return null
+
+  // (A) organization_settings.waha_config
+  const { data: orgRows } = await supabase
+    .from('organization_settings')
+    .select('organization_id, waha_config')
+    .not('waha_config', 'is', null)
+
+  for (const row of (orgRows ?? []) as Array<Record<string, unknown>>) {
+    const cfg = row.waha_config as
+      | { sessionName?: string; baseUrl?: string; apiKey?: string }
+      | null
+    if (cfg?.sessionName === sessionName) {
+      return {
+        organizationId: row.organization_id as string,
+        sessionName,
+        baseUrl: cfg.baseUrl,
+        apiKey: cfg.apiKey,
+        source: 'organization_settings',
+      }
+    }
+  }
+
+  // (B) business_unit_channel_settings (caso WAHA configurado por BU)
+  const { data: buRows } = await supabase
+    .from('business_unit_channel_settings')
+    .select('organization_id, business_unit_id, config')
+    .eq('channel', 'whatsapp')
+
+  for (const row of (buRows ?? []) as Array<Record<string, unknown>>) {
+    const cfg = row.config as
+      | { sessionName?: string; baseUrl?: string; apiKey?: string }
+      | null
+    if (cfg?.sessionName === sessionName) {
+      return {
+        organizationId: row.organization_id as string,
+        sessionName,
+        baseUrl: cfg.baseUrl,
+        apiKey: cfg.apiKey,
+        source: 'business_unit_channel_settings',
+      }
+    }
+  }
+
+  return null
+}
+
+/**
+ * Para o simulador WAHA. Retorna a primeira config WAHA configurada na
+ * org (geralmente só existe uma).
+ */
+export async function findAnyWahaConfigForOrg(
+  supabase: SupabaseClient,
+  organizationId: string,
+): Promise<ResolvedWahaConfig | null> {
+  // (A) organization_settings.waha_config
+  const { data: orgRow } = await supabase
+    .from('organization_settings')
+    .select('waha_config')
+    .eq('organization_id', organizationId)
+    .maybeSingle()
+
+  const orgCfg = (orgRow as Record<string, unknown> | null)?.waha_config as
+    | { sessionName?: string; baseUrl?: string; apiKey?: string }
+    | null
+
+  if (orgCfg?.sessionName) {
+    return {
+      organizationId,
+      sessionName: orgCfg.sessionName,
+      baseUrl: orgCfg.baseUrl,
+      apiKey: orgCfg.apiKey,
+      source: 'organization_settings',
+    }
+  }
+
+  // (B) business_unit_channel_settings
+  const { data: buRows } = await supabase
+    .from('business_unit_channel_settings')
+    .select('business_unit_id, config')
+    .eq('organization_id', organizationId)
+    .eq('channel', 'whatsapp')
+
+  for (const row of (buRows ?? []) as Array<Record<string, unknown>>) {
+    const cfg = row.config as
+      | { sessionName?: string; baseUrl?: string; apiKey?: string }
+      | null
+    if (cfg?.sessionName) {
+      return {
+        organizationId,
+        sessionName: cfg.sessionName,
+        baseUrl: cfg.baseUrl,
+        apiKey: cfg.apiKey,
         source: 'business_unit_channel_settings',
       }
     }
