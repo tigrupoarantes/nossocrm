@@ -51,6 +51,12 @@ export interface ConversationWithContact {
   updated_at: string;
   contacts?: { name: string; phone: string } | null;
   deals?: { title: string } | null;
+  assigned_user?: {
+    first_name: string | null;
+    last_name: string | null;
+    nickname: string | null;
+    avatar_url: string | null;
+  } | null;
 }
 
 export interface ConversationsFilter {

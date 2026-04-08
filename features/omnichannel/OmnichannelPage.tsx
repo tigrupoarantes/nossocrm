@@ -44,6 +44,22 @@ function contactDisplay(c: ConversationWithContact): { name: string; phone: stri
   return { name, phone };
 }
 
+function assignedDisplayName(profile: ConversationWithContact['assigned_user']): string {
+  if (!profile) return 'Atendente';
+  if (profile.nickname) return profile.nickname;
+  const full = [profile.first_name, profile.last_name].filter(Boolean).join(' ').trim();
+  return full || 'Atendente';
+}
+
+function assignedInitials(profile: ConversationWithContact['assigned_user']): string {
+  if (!profile) return 'A';
+  if (profile.first_name && profile.last_name) {
+    return `${profile.first_name[0]}${profile.last_name[0]}`.toUpperCase();
+  }
+  const name = assignedDisplayName(profile);
+  return name.substring(0, 2).toUpperCase();
+}
+
 function StatusPill({ status }: { status: ConversationStatus }) {
   const styles: Record<ConversationStatus, string> = {
     em_espera: 'bg-amber-500/20 text-amber-600 dark:text-amber-300 border border-amber-500/30',
@@ -182,7 +198,9 @@ function ConversationQueue({
                     </time>
                   </div>
                   <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">
-                    {conv.deals?.title ?? 'WhatsApp'}
+                    {conv.status === 'em_atendimento' && conv.assigned_user
+                      ? `Atendente: ${assignedDisplayName(conv.assigned_user)}`
+                      : conv.deals?.title ?? 'WhatsApp'}
                   </p>
                   <div className="flex items-center gap-1.5 mt-1.5">
                     <StatusPill status={conv.status} />
@@ -240,6 +258,20 @@ function ConversationHeader({ conversation, currentUserId, onAssign, onClose, on
             <ChannelIcon channel={conversation.channel} />
             {channelLabel}
           </p>
+          {conversation.assigned_user_id && (
+            <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5 mt-0.5">
+              <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-500/20 text-blue-600 dark:text-blue-300 text-[9px] font-bold">
+                {assignedInitials(conversation.assigned_user)}
+              </span>
+              <span>
+                Atendendo:{' '}
+                <span className="font-medium text-slate-700 dark:text-slate-200">
+                  {assignedDisplayName(conversation.assigned_user)}
+                </span>
+                {isMine && <span className="text-slate-400"> (você)</span>}
+              </span>
+            </p>
+          )}
         </div>
       </div>
 

@@ -55,5 +55,24 @@ export async function GET(
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  return NextResponse.json({ data: data ?? [], totalCount: count ?? 0 });
+  // Normaliza snake_case (Supabase) -> camelCase (tipo Message do projeto).
+  // Sem isso, componentes que leem `message.sentAt` recebem undefined e
+  // renderizam "Invalid Date".
+  const mapped = (data ?? []).map((m) => ({
+    id: m.id,
+    organizationId: m.organization_id,
+    conversationId: m.conversation_id,
+    externalMessageId: m.external_message_id ?? m.wa_message_id ?? null,
+    channel: m.channel ?? 'whatsapp',
+    messageType: m.message_type ?? 'text',
+    direction: m.direction,
+    body: m.body ?? '',
+    mediaUrl: m.media_url ?? null,
+    status: m.status,
+    sentAt: m.sent_at,
+    createdAt: m.created_at,
+    metadata: m.metadata ?? {},
+  }));
+
+  return NextResponse.json({ data: mapped, totalCount: count ?? 0 });
 }

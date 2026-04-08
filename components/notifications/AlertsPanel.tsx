@@ -10,10 +10,9 @@ interface Notification {
   id: string
   type: string
   title: string
-  body: string
+  message: string | null
   read_at: string | null
   created_at: string
-  metadata: Record<string, unknown>
 }
 
 const TYPE_META: Record<string, { icon: React.ElementType; color: string }> = {
@@ -32,29 +31,29 @@ interface Props {
 }
 
 export function AlertsPanel({ variant = 'button' }: Props) {
-  const { organizationId, user } = useAuth()
+  const { organizationId } = useAuth()
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
 
   const { data: notifications = [] } = useQuery({
-    queryKey: ['alerts-panel', user?.id],
+    queryKey: ['alerts-panel', organizationId],
     queryFn: async (): Promise<Notification[]> => {
       const { data } = await supabase
         .from('system_notifications')
-        .select('id, type, title, body, read_at, created_at, metadata')
-        .eq('user_id', user!.id)
+        .select('id, type, title, message, read_at, created_at')
+        .eq('organization_id', organizationId!)
         .order('created_at', { ascending: false })
         .limit(30)
 
       return data ?? []
     },
-    enabled: !!user?.id,
+    enabled: !!organizationId,
     refetchInterval: 30_000,
   })
 
   // Realtime subscription
   useEffect(() => {
-    if (!user?.id) return
+    if (!organizationId) return
 
     const channel = supabase
       .channel('alerts-panel-realtime')
@@ -62,14 +61,14 @@ export function AlertsPanel({ variant = 'button' }: Props) {
         event: 'INSERT',
         schema: 'public',
         table: 'system_notifications',
-        filter: `user_id=eq.${user.id}`,
+        filter: `organization_id=eq.${organizationId}`,
       }, () => {
         queryClient.invalidateQueries({ queryKey: ['alerts-panel'] })
       })
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
-  }, [user?.id, queryClient])
+  }, [organizationId, queryClient])
 
   const unreadCount = notifications.filter((n) => !n.read_at).length
 
@@ -78,7 +77,7 @@ export function AlertsPanel({ variant = 'button' }: Props) {
       await supabase
         .from('system_notifications')
         .update({ read_at: new Date().toISOString() })
-        .eq('user_id', user!.id)
+        .eq('organization_id', organizationId!)
         .is('read_at', null)
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['alerts-panel'] }),
@@ -151,8 +150,8 @@ export function AlertsPanel({ variant = 'button' }: Props) {
                   <p className={`text-xs font-medium truncate ${notif.read_at ? 'text-slate-700 dark:text-slate-300' : 'text-slate-900 dark:text-white'}`}>
                     {notif.title}
                   </p>
-                  {notif.body && (
-                    <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{notif.body}</p>
+                  {notif.message && (
+                    <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{notif.message}</p>
                   )}
                   <time className="text-xs text-slate-400 mt-1 block">
                     {new Date(notif.created_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}

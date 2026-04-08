@@ -52,5 +52,47 @@ export async function GET(request: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  return NextResponse.json({ data: data ?? [], totalCount: count ?? 0 });
+  // Resolve atendente humano (assigned_user_id -> profile) em uma única
+  // segunda query. PostgREST não infere o join automático porque a FK aponta
+  // para auth.users, não para profiles.
+  const rows = data ?? [];
+  const assignedIds = Array.from(
+    new Set(
+      rows
+        .map((c) => c.assigned_user_id as string | null)
+        .filter((x): x is string => !!x),
+    ),
+  );
+
+  type AssignedProfile = {
+    first_name: string | null;
+    last_name: string | null;
+    nickname: string | null;
+    avatar_url: string | null;
+  };
+  const profilesById: Record<string, AssignedProfile> = {};
+
+  if (assignedIds.length > 0) {
+    const { data: profs } = await supabase
+      .from('profiles')
+      .select('id, first_name, last_name, nickname, avatar_url')
+      .in('id', assignedIds);
+    for (const p of profs ?? []) {
+      profilesById[p.id as string] = {
+        first_name: p.first_name ?? null,
+        last_name: p.last_name ?? null,
+        nickname: p.nickname ?? null,
+        avatar_url: p.avatar_url ?? null,
+      };
+    }
+  }
+
+  const enriched = rows.map((c) => ({
+    ...c,
+    assigned_user: c.assigned_user_id
+      ? profilesById[c.assigned_user_id as string] ?? null
+      : null,
+  }));
+
+  return NextResponse.json({ data: enriched, totalCount: count ?? 0 });
 }
