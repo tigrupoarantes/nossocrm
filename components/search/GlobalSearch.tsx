@@ -18,7 +18,7 @@ interface SearchResult {
 
 const QUICK_LINKS: SearchResult[] = [
   { id: 'dash', type: 'page', title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { id: 'conv', type: 'page', title: 'Conversas', href: '/conversations', icon: MessageSquare },
+  { id: 'conv', type: 'page', title: 'Omnichannel', href: '/omnichannel', icon: MessageSquare },
   { id: 'agent', type: 'page', title: 'Super Agente', href: '/super-agent', icon: Bot },
   { id: 'ads', type: 'page', title: 'Anúncios', href: '/ads', icon: Megaphone },
   { id: 'conn', type: 'page', title: 'Conexões', href: '/connections', icon: Link2 },

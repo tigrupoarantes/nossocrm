@@ -28,6 +28,8 @@ export const conversationKeys = {
 // Types (snake_case — espelha resposta raw do Supabase)
 // =============================================================================
 
+export type ConversationStatus = 'em_espera' | 'em_atendimento' | 'encerrado';
+
 export interface ConversationWithContact {
   id: string;
   organization_id: string;
@@ -40,10 +42,21 @@ export interface ConversationWithContact {
   channel_metadata: Record<string, unknown>;
   last_message_at: string | null;
   unread_count: number;
+  status: ConversationStatus;
+  assigned_user_id: string | null;
+  ai_agent_owned: boolean;
+  closed_at: string | null;
+  closed_by: string | null;
   created_at: string;
   updated_at: string;
   contacts?: { name: string; phone: string } | null;
   deals?: { title: string } | null;
+}
+
+export interface ConversationsFilter {
+  channel?: ConversationChannel;
+  status?: ConversationStatus;
+  assignedTo?: 'me' | 'unassigned' | string;
 }
 
 export interface ConversationWithMessages extends ConversationWithContact {
@@ -64,15 +77,29 @@ export interface SendMessageParams {
 
 /**
  * Fetch all conversations for the current org, ordered by last_message_at DESC.
- * Suporta filtro opcional de canal via query param.
+ * Aceita um filtro (canal, status, atribuição). Para compatibilidade, ainda
+ * aceita o atalho legado `useConversations('whatsapp')` apenas com o canal.
  */
-export function useConversations(channel?: ConversationChannel) {
+export function useConversations(filter?: ConversationChannel | ConversationsFilter) {
+  const normalized: ConversationsFilter =
+    typeof filter === 'string' ? { channel: filter } : (filter ?? {});
+
+  const queryKey = [
+    ...conversationKeys.lists(),
+    normalized.channel ?? null,
+    normalized.status ?? null,
+    normalized.assignedTo ?? null,
+  ] as const;
+
   return useQuery<ConversationWithContact[]>({
-    queryKey: channel ? [...conversationKeys.lists(), channel] : conversationKeys.lists(),
+    queryKey,
     queryFn: async () => {
-      const url = channel
-        ? `/api/conversations?channel=${channel}`
-        : '/api/conversations';
+      const params = new URLSearchParams();
+      if (normalized.channel) params.set('channel', normalized.channel);
+      if (normalized.status) params.set('status', normalized.status);
+      if (normalized.assignedTo) params.set('assignedTo', normalized.assignedTo);
+      const qs = params.toString();
+      const url = qs ? `/api/conversations?${qs}` : '/api/conversations';
       const response = await fetch(url);
       if (!response.ok) {
         throw new Error(`Failed to fetch conversations: ${response.status}`);
@@ -218,6 +245,49 @@ export function useSendWahaMessage() {
       void queryClient.invalidateQueries({ queryKey: conversationKeys.lists() });
     },
   });
+}
+
+// =============================================================================
+// Omnichannel — atribuição, encerramento, handoff
+// =============================================================================
+
+function useConversationStatusMutation(action: 'assign' | 'close' | 'reopen' | 'handoff-to-ai') {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (conversationId: string) => {
+      const response = await fetch(`/api/conversations/${conversationId}/${action}`, {
+        method: 'POST',
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({})) as { error?: string };
+        throw new Error(err.error ?? `${action} failed: ${response.status}`);
+      }
+      return response.json() as Promise<{ ok: boolean }>;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: conversationKeys.all });
+    },
+  });
+}
+
+/** Atribui a conversa ao usuário atual (status -> em_atendimento, ai_agent_owned -> false). */
+export function useAssignConversation() {
+  return useConversationStatusMutation('assign');
+}
+
+/** Encerra a conversa (status -> encerrado). */
+export function useCloseConversation() {
+  return useConversationStatusMutation('close');
+}
+
+/** Reabre uma conversa encerrada (status -> em_espera). */
+export function useReopenConversation() {
+  return useConversationStatusMutation('reopen');
+}
+
+/** Devolve a conversa para o Super Agente (ai_agent_owned -> true). */
+export function useHandoffToAI() {
+  return useConversationStatusMutation('handoff-to-ai');
 }
 
 /**

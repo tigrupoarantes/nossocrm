@@ -1,7 +1,9 @@
-import { ConversationsPage } from '@/features/conversations/ConversationsPage'
+import { redirect } from 'next/navigation';
 
-export const metadata = { title: 'Conversas | NossoCRM' }
-
-export default function Page() {
-  return <ConversationsPage />
+/**
+ * /conversations foi consolidado em /omnichannel.
+ * Mantido como redirect por 1 release para não quebrar bookmarks.
+ */
+export default function ConversationsRedirect() {
+  redirect('/omnichannel');
 }

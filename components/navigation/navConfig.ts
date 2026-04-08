@@ -1,6 +1,5 @@
 import type { ComponentType } from 'react';
 import {
-  Inbox,
   KanbanSquare,
   Users,
   CheckSquare,
@@ -12,13 +11,13 @@ import {
   Bot,
   Search,
   Megaphone,
-  MessageSquare,
+  MessagesSquare,
   Link2,
   BookOpen,
   GraduationCap,
 } from 'lucide-react';
 
-export type PrimaryNavId = 'inbox' | 'boards' | 'contacts' | 'activities' | 'conversations' | 'more';
+export type PrimaryNavId = 'omnichannel' | 'boards' | 'contacts' | 'activities' | 'more';
 
 export interface PrimaryNavItem {
   id: PrimaryNavId;
@@ -29,8 +28,7 @@ export interface PrimaryNavItem {
 }
 
 export const PRIMARY_NAV: PrimaryNavItem[] = [
-  { id: 'inbox', label: 'Inbox', href: '/inbox', icon: Inbox },
-  { id: 'conversations', label: 'Conversas', href: '/conversations', icon: MessageSquare },
+  { id: 'omnichannel', label: 'Omnichannel', href: '/omnichannel', icon: MessagesSquare },
   { id: 'boards', label: 'CRM', href: '/boards', icon: KanbanSquare },
   { id: 'contacts', label: 'Contatos', href: '/contacts', icon: Users },
   { id: 'activities', label: 'Atividades', href: '/activities', icon: CheckSquare },

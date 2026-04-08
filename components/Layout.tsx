@@ -36,7 +36,6 @@ import {
   Sun,
   Moon,
   BarChart3,
-  Inbox,
   Sparkles,
   LogOut,
   User,
@@ -46,7 +45,7 @@ import {
   PanelLeftOpen,
   Layout as LayoutIcon,
   Bot,
-  MessageSquare,
+  MessagesSquare,
   Megaphone,
   Link2,
   BookOpen,
@@ -280,8 +279,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             {
               label: 'Principal',
               items: [
-                { to: '/inbox', icon: Inbox, label: 'Inbox', prefetch: 'inbox' as const },
-                { to: '/conversations', icon: MessageSquare, label: 'Conversas' },
+                { to: '/omnichannel', icon: MessagesSquare, label: 'Omnichannel' },
                 { to: '/dashboard', icon: LayoutDashboard, label: 'Visão Geral', prefetch: 'dashboard' as const },
                 { to: '/boards', icon: KanbanSquare, label: 'Boards', prefetch: 'boards' as const },
                 { to: '/contacts', icon: Users, label: 'Contatos', prefetch: 'contacts' as const },

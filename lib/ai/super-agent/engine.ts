@@ -47,6 +47,21 @@ export async function processWithSuperAgent(
   return withExclusive(input.conversationId, async () => {
     const startMs = Date.now()
 
+    // 0. Gate: respeitar handoff humano. Se um humano já assumiu a conversa
+    //    (ai_agent_owned=false) ou ela está encerrada, o Super Agente não responde.
+    const { data: convRow } = await sb
+      .from('conversations')
+      .select('ai_agent_owned, status')
+      .eq('id', input.conversationId)
+      .single()
+
+    if (convRow && convRow.ai_agent_owned === false) {
+      return { status: 'skipped', reason: 'Conversa atribuída a humano' }
+    }
+    if (convRow && convRow.status === 'encerrado') {
+      return { status: 'skipped', reason: 'Conversa encerrada' }
+    }
+
     // 1. Buscar agente ativo
     const agentQuery = sb
       .from('super_agents')
@@ -116,8 +131,15 @@ export async function processWithSuperAgent(
         metadata: { handoff_reason: handoffCheck.reason, trigger: handoffCheck.triggerText }
       })
 
-      // Marcar conversa como aguardando humano
-      await sb.from('conversations').update({ assigned_to: null, metadata: { handoff_requested: true } }).eq('id', input.conversationId)
+      // Marcar conversa como aguardando humano: desliga agente, mantém em_espera
+      await sb
+        .from('conversations')
+        .update({
+          ai_agent_owned: false,
+          assigned_user_id: null,
+          status: 'em_espera',
+        })
+        .eq('id', input.conversationId)
 
       return { status: 'handoff', agentId: agent.id, response: handoffMsg }
     }
