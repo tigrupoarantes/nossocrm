@@ -16,7 +16,8 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-const META_API_VERSION = 'v19.0'
+// Versão atual estável da Meta Cloud API (dezembro/2024).
+const META_API_VERSION = 'v22.0'
 const META_GRAPH_URL = `https://graph.facebook.com/${META_API_VERSION}`
 
 // =============================================================================
@@ -155,8 +156,10 @@ export async function sendAutomationMeta(
   }
 
   // Persistir no banco (upsert conversa + mensagem)
+  // IMPORTANTE: usar @c.us para casar com o formato usado pelo outbound
+  // (app/api/deals/[id]/conversations/route.ts) e pelo webhook inbound.
   const normalizedPhone = normalizeMetaPhone(contactPhone)
-  const waChatId = `${normalizedPhone}@s.whatsapp.net`
+  const waChatId = `${normalizedPhone}@c.us`
   const sentAt = new Date().toISOString()
 
   const { data: conv } = await supabase

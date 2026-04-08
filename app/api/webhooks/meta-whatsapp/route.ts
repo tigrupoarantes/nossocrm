@@ -150,93 +150,167 @@ async function findContactByPhone(
   return (data?.id as string | undefined) ?? null
 }
 
-async function findActiveDealByPhone(
+/**
+ * Procura um deal QUALIFICATION ativo para esse contato dentro da org.
+ * Usado para disparar automação onResponseReceived. Não bloqueia a
+ * persistência da mensagem se retornar null.
+ */
+async function findActiveDealForContact(
   supabase: AdminClient,
-  phone: string
+  organizationId: string,
+  contactId: string,
 ): Promise<{ dealId: string; boardId: string; organizationId: string } | null> {
-  const { data: contacts } = await supabase
-    .from('contacts')
-    .select('id, organization_id')
-    .ilike('phone', `%${phone}%`)
-    .limit(5)
+  const { data: deals } = await supabase
+    .from('deals')
+    .select('id, board_id, boards!inner(id, template)')
+    .eq('contact_id', contactId)
+    .eq('organization_id', organizationId)
+    .is('won_at', null)
+    .is('lost_at', null)
+    .eq('boards.template', 'QUALIFICATION')
+    .limit(1)
 
-  if (!contacts || contacts.length === 0) return null
+  if (!deals || deals.length === 0) return null
+  const deal = deals[0] as Record<string, unknown>
+  return {
+    dealId: deal.id as string,
+    boardId: deal.board_id as string,
+    organizationId,
+  }
+}
 
-  for (const contact of contacts) {
-    const { data: deals } = await supabase
-      .from('deals')
-      .select('id, board_id, boards!inner(id, template)')
-      .eq('contact_id', contact.id)
-      .eq('organization_id', contact.organization_id)
-      .is('won_at', null)
-      .is('lost_at', null)
-      .eq('boards.template', 'QUALIFICATION')
-      .limit(1)
-
-    if (deals && deals.length > 0) {
-      const deal = deals[0] as Record<string, unknown>
-      return {
-        dealId: deal.id as string,
-        boardId: deal.board_id as string,
-        organizationId: contact.organization_id as string,
-      }
+/**
+ * Busca defensiva por conversa existente. Tenta primeiro o formato canônico
+ * (@c.us) e cai para o legado (@s.whatsapp.net) caso a migration ainda não
+ * tenha sido aplicada. Retorna o id e o wa_chat_id encontrado.
+ */
+async function findExistingConversation(
+  supabase: AdminClient,
+  organizationId: string,
+  phoneDigits: string,
+): Promise<{ id: string; wa_chat_id: string } | null> {
+  const candidates = [`${phoneDigits}@c.us`, `${phoneDigits}@s.whatsapp.net`]
+  for (const candidate of candidates) {
+    const { data } = await supabase
+      .from('conversations')
+      .select('id, wa_chat_id')
+      .eq('organization_id', organizationId)
+      .eq('wa_chat_id', candidate)
+      .maybeSingle()
+    if (data?.id) {
+      return { id: data.id as string, wa_chat_id: data.wa_chat_id as string }
     }
   }
-
   return null
 }
 
-async function upsertConversationAndMessage(
+async function persistInboundMessage(
   supabase: AdminClient,
   params: {
     organizationId: string
     contactId: string | null
     dealId: string | null
-    waChatId: string
+    phoneDigits: string
     waMessageId: string
     body: string
     sentAt: string
   }
-): Promise<void> {
-  const { data: conv } = await supabase
-    .from('conversations')
-    .upsert(
-      {
+): Promise<string | null> {
+  // 1) Tenta achar conversa existente em qualquer formato (defensivo).
+  const existing = await findExistingConversation(
+    supabase,
+    params.organizationId,
+    params.phoneDigits,
+  )
+
+  let conversationId: string
+
+  if (existing) {
+    conversationId = existing.id
+    // Atualiza last_message_at + incrementa unread_count
+    const { data: convCurrent } = await supabase
+      .from('conversations')
+      .select('unread_count')
+      .eq('id', conversationId)
+      .single()
+    await supabase
+      .from('conversations')
+      .update({
+        last_message_at: params.sentAt,
+        unread_count: ((convCurrent?.unread_count as number | null) ?? 0) + 1,
+        // Vincula contato/deal se ainda não estiverem
+        ...(params.contactId ? { contact_id: params.contactId } : {}),
+        ...(params.dealId ? { deal_id: params.dealId } : {}),
+      })
+      .eq('id', conversationId)
+  } else {
+    // 2) Cria nova conversa em formato canônico @c.us
+    const { data: newConv, error: createErr } = await supabase
+      .from('conversations')
+      .insert({
         organization_id: params.organizationId,
         contact_id: params.contactId,
         deal_id: params.dealId,
-        wa_chat_id: params.waChatId,
+        wa_chat_id: `${params.phoneDigits}@c.us`,
         channel: 'whatsapp',
         last_message_at: params.sentAt,
         unread_count: 1,
-      },
-      { onConflict: 'organization_id,wa_chat_id', ignoreDuplicates: false }
-    )
-    .select('id, unread_count')
-    .single()
+        channel_metadata: {},
+      })
+      .select('id')
+      .single()
 
-  if (!conv?.id) return
+    if (createErr || !newConv?.id) {
+      console.error('[MetaWebhook] failed to create conversation', { error: createErr?.message, phone: params.phoneDigits })
+      return null
+    }
+    conversationId = newConv.id as string
+  }
 
-  await supabase
-    .from('conversations')
-    .update({
-      last_message_at: params.sentAt,
-      unread_count: (conv.unread_count ?? 0) + 1,
-    })
-    .eq('id', conv.id)
-
-  await supabase.from('messages').upsert(
+  // 3) Insere a mensagem (idempotente via external_message_id)
+  const { error: msgErr } = await supabase.from('messages').upsert(
     {
       organization_id: params.organizationId,
-      conversation_id: conv.id,
+      conversation_id: conversationId,
       wa_message_id: params.waMessageId,
+      external_message_id: params.waMessageId,
+      channel: 'whatsapp',
+      message_type: 'text',
       direction: 'inbound',
       body: params.body,
       status: 'delivered',
       sent_at: params.sentAt,
     },
-    { onConflict: 'organization_id,wa_message_id', ignoreDuplicates: true }
+    { onConflict: 'organization_id,external_message_id', ignoreDuplicates: true }
   )
+
+  if (msgErr) {
+    console.error('[MetaWebhook] failed to insert message', { error: msgErr.message, conversationId })
+  }
+
+  return conversationId
+}
+
+/**
+ * Atualiza o status de uma mensagem outbound a partir de um status update
+ * da Meta (sent / delivered / read / failed). Idempotente.
+ */
+async function applyStatusUpdate(
+  supabase: AdminClient,
+  params: { externalMessageId: string; status: string }
+): Promise<void> {
+  // Mapeia status da Meta para o domínio interno
+  const allowed = new Set(['sent', 'delivered', 'read', 'failed'])
+  if (!allowed.has(params.status)) return
+
+  const { error } = await supabase
+    .from('messages')
+    .update({ status: params.status })
+    .eq('external_message_id', params.externalMessageId)
+
+  if (error) {
+    console.error('[MetaWebhook] status update failed', { error: error.message, ...params })
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -253,21 +327,62 @@ export async function POST(request: Request) {
 
   const supabase = createStaticAdminClient()
 
+  console.log('[MetaWebhook] POST received', {
+    entries: webhookBody.entry?.length ?? 0,
+  })
+
   for (const entry of webhookBody.entry ?? []) {
     for (const change of entry.changes ?? []) {
       if (change.field !== 'messages') continue
 
       const value = change.value
-      const messages = value.messages ?? []
-
       const phoneNumberId = value.metadata?.phone_number_id ?? null
 
-      for (const message of messages) {
-        // Apenas processar mensagens de texto por enquanto
-        if (message.type !== 'text' || !message.text?.body) continue
+      // -------------------------------------------------------------------
+      // (A) Status updates (delivered / read / failed) — ✓ ✓✓ ✓✓ azul
+      // -------------------------------------------------------------------
+      const statuses = value.statuses ?? []
+      if (statuses.length > 0) {
+        console.log('[MetaWebhook] processing statuses', { count: statuses.length })
+        for (const status of statuses) {
+          if (!status.id || !status.status) continue
+          await applyStatusUpdate(supabase, {
+            externalMessageId: status.id,
+            status: status.status,
+          })
+        }
+      }
 
-        const fromRaw = message.from // ex: "5511999990000"
-        const messageId = message.id // ex: "wamid.xxx"
+      // -------------------------------------------------------------------
+      // (B) Inbound messages
+      // -------------------------------------------------------------------
+      const messages = value.messages ?? []
+      if (messages.length === 0) continue
+
+      // Resolver org UMA vez por change (todas as messages do mesmo
+      // phone_number_id). Mais barato e mais correto que por mensagem.
+      const organizationId = await resolveOrganizationByPhoneNumberId(
+        supabase,
+        phoneNumberId,
+      )
+
+      if (!organizationId) {
+        console.warn('[MetaWebhook] inbound dropped — phone_number_id has no org', {
+          phoneNumberId,
+          messageCount: messages.length,
+        })
+        continue
+      }
+
+      for (const message of messages) {
+        // Por enquanto só processamos texto. Mídia entra na próxima rodada.
+        if (message.type !== 'text' || !message.text?.body) {
+          console.log('[MetaWebhook] skipping non-text message', { type: message.type, id: message.id })
+          continue
+        }
+
+        const fromRaw = message.from
+        const messageId = message.id
         const body = message.text.body
         const timestamp = parseInt(message.timestamp, 10)
         const sentAt = new Date(timestamp * 1000).toISOString()
@@ -275,66 +390,47 @@ export async function POST(request: Request) {
         if (!fromRaw) continue
 
         const normalizedPhone = normalizeMetaPhone(fromRaw)
-        // Padrão usado pelo lado outbound (app/api/deals/[id]/conversations/route.ts):
-        // "5511...@c.us". Manter o mesmo formato é o que faz o webhook achar a
-        // mesma conversa em vez de criar duplicata.
-        const waChatId = `${normalizedPhone}@c.us`
 
-        // 1) Tentar resolver via deal ativo (ainda usado pela automação)
-        const dealMatch = await findActiveDealByPhone(supabase, normalizedPhone)
-
-        // 2) Fallback: resolver org pelo phone_number_id da Meta
-        const organizationId =
-          dealMatch?.organizationId ??
-          (await resolveOrganizationByPhoneNumberId(supabase, phoneNumberId))
-
-        if (!organizationId) {
-          console.warn(
-            '[MetaWebhook] inbound dropped — no org for phone_number_id=%s from=%s',
-            phoneNumberId,
-            fromRaw,
-          )
-          continue
-        }
-
-        // 3) Tentar achar contato dessa org pelo telefone (para vincular)
+        // Procurar contato e (opcional) deal ativo nesta org.
         const contactId = await findContactByPhone(supabase, organizationId, normalizedPhone)
+        const dealMatch = contactId
+          ? await findActiveDealForContact(supabase, organizationId, contactId)
+          : null
 
-        // 4) Persistir conversa e mensagem (upsert agora casa pelo @c.us)
-        await upsertConversationAndMessage(supabase, {
+        const conversationId = await persistInboundMessage(supabase, {
           organizationId,
           contactId,
           dealId: dealMatch?.dealId ?? null,
-          waChatId,
+          phoneDigits: normalizedPhone,
           waMessageId: messageId,
           body,
           sentAt,
         })
 
-        // 5) Automação só faz sentido se houver deal vinculado
+        if (!conversationId) {
+          console.error('[MetaWebhook] persist failed', { phone: normalizedPhone, messageId })
+          continue
+        }
+
+        console.log('[MetaWebhook] inbound persisted', {
+          conversationId,
+          contactId,
+          dealId: dealMatch?.dealId ?? null,
+          phone: normalizedPhone,
+        })
+
+        // Automação só dispara se houver deal vinculado.
         if (dealMatch) {
           await onResponseReceived(dealMatch)
         }
 
-        // 6) Super Agente em background
-        if (body) {
-          void Promise.resolve(
-            supabase
-              .from('conversations')
-              .select('id')
-              .eq('organization_id', organizationId)
-              .eq('wa_chat_id', waChatId)
-              .single()
-          ).then(({ data: conv }) => {
-            if (!conv?.id) return
-            return processWithSuperAgent(supabase, {
-              organizationId,
-              conversationId: conv.id,
-              contactPhone: normalizedPhone,
-              inboundMessage: body,
-            })
-          }).catch((e) => console.error('[MetaWebhook] Super Agent error:', e))
-        }
+        // Super Agente em background.
+        void processWithSuperAgent(supabase, {
+          organizationId,
+          conversationId,
+          contactPhone: normalizedPhone,
+          inboundMessage: body,
+        }).catch((e) => console.error('[MetaWebhook] Super Agent error:', e))
       }
     }
   }
