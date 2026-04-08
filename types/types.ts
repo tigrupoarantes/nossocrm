@@ -594,7 +594,7 @@ export interface Conversation {
 }
 
 export type MessageDirection = 'inbound' | 'outbound';
-export type MessageStatus = 'sent' | 'delivered' | 'read' | 'failed';
+export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
 export type MessageType =
   | 'text'
   | 'image'

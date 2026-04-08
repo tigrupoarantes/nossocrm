@@ -159,8 +159,37 @@ export function useDealConversations(dealId: string | null) {
 }
 
 /**
+ * Cria uma mensagem otimista (status='sending') para inserir no cache antes
+ * da resposta do servidor. O React renderiza a bolha imediatamente; quando o
+ * POST volta, a invalidação substitui a temp pela real.
+ */
+function createOptimisticMessage(params: SendMessageParams): Message {
+  const now = new Date().toISOString();
+  return {
+    id: `temp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    organizationId: '',
+    conversationId: params.conversationId,
+    waMessageId: null,
+    externalMessageId: null,
+    channel: params.channel ?? 'whatsapp',
+    messageType: 'text',
+    direction: 'outbound',
+    body: params.body,
+    mediaUrl: params.mediaUrl ?? null,
+    status: 'sending',
+    sentAt: now,
+    createdAt: now,
+    metadata: {},
+  };
+}
+
+/**
  * Mutation para enviar mensagem via router omnichannel (/api/messages/send).
- * Invalida mensagens e lista de conversas ao concluir.
+ *
+ * Optimistic UI: insere uma bolha temporária com status='sending' no cache
+ * de mensagens ANTES do POST. Quando o servidor confirma, invalida e a temp
+ * é substituída pela real (com external_message_id e status='sent'). Em caso
+ * de erro, faz rollback do snapshot e mantém a temp marcada como 'failed'.
  */
 export function useSendMessage() {
   const queryClient = useQueryClient();
@@ -186,10 +215,34 @@ export function useSendMessage() {
 
       return response.json() as Promise<{ ok: boolean; message: Message }>;
     },
+    onMutate: async (variables) => {
+      const messagesKey = conversationKeys.messages(variables.conversationId);
+      // Cancela queries em voo para não sobrescrever a temp.
+      await queryClient.cancelQueries({ queryKey: messagesKey });
+
+      const previous = queryClient.getQueryData<Message[]>(messagesKey) ?? [];
+      const tempMessage = createOptimisticMessage(variables);
+
+      queryClient.setQueryData<Message[]>(messagesKey, [...previous, tempMessage]);
+
+      return { previous, tempId: tempMessage.id, messagesKey };
+    },
+    onError: (_err, _variables, context) => {
+      // Rollback: restaura snapshot mas mantém a temp marcada como 'failed'
+      // para o usuário ver que falhou (em vez de sumir silenciosamente).
+      if (!context) return;
+      const failed: Message[] = context.previous.map((m) => m);
+      const tempCopy = queryClient
+        .getQueryData<Message[]>(context.messagesKey)
+        ?.find((m) => m.id === context.tempId);
+      if (tempCopy) {
+        failed.push({ ...tempCopy, status: 'failed' });
+      }
+      queryClient.setQueryData<Message[]>(context.messagesKey, failed);
+    },
     onSuccess: (_, variables) => {
       void queryClient.invalidateQueries({ queryKey: conversationKeys.messages(variables.conversationId) });
       void queryClient.invalidateQueries({ queryKey: conversationKeys.lists() });
-      // Invalida também conversas do deal se houver deal vinculado
       void queryClient.invalidateQueries({ queryKey: conversationKeys.all });
     },
   });
