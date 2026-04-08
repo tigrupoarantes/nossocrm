@@ -13,6 +13,7 @@
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { findAnyMetaConfigForOrg } from '@/lib/communication/meta-config-resolver';
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -32,22 +33,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  // Buscar o phoneNumberId configurado da org
-  const { data: settings } = await supabase
-    .from('organization_settings')
-    .select('meta_whatsapp_config')
-    .eq('organization_id', profile.organization_id)
-    .single();
+  // Buscar o phoneNumberId configurado da org. Olha em ambos lugares:
+  // organization_settings (single-tenant) E business_unit_channel_settings
+  // (Multi-BU). Sem isso, orgs Multi-BU sempre falham aqui.
+  const resolved = await findAnyMetaConfigForOrg(supabase, profile.organization_id);
 
-  const cfg = (settings as Record<string, unknown>)?.meta_whatsapp_config as
-    | { phoneNumberId?: string }
-    | null;
-
-  if (!cfg?.phoneNumberId) {
+  if (!resolved?.phoneNumberId) {
     return NextResponse.json(
       {
-        error: 'meta_whatsapp_config.phoneNumberId não configurado para esta organização',
-        hint: 'Vá em Configurações → Comunicação → Meta WhatsApp e preencha o Phone Number ID que você cadastrou na Meta for Developers.',
+        error: 'Meta WhatsApp não configurado para esta organização',
+        hint: 'Configure o Phone Number ID em Configurações → Comunicação → Meta WhatsApp OU em uma Business Unit ativa (Configurações → Unidades de Negócio → Canais).',
       },
       { status: 422 },
     );
@@ -74,7 +69,7 @@ export async function POST(request: Request) {
               messaging_product: 'whatsapp',
               metadata: {
                 display_phone_number: 'simulated',
-                phone_number_id: cfg.phoneNumberId,
+                phone_number_id: resolved.phoneNumberId,
               },
               contacts: [{ profile: { name: 'Simulador' }, wa_id: phone }],
               messages: [
@@ -106,6 +101,8 @@ export async function POST(request: Request) {
     webhookStatus: 'status' in res ? res.status : 0,
     payloadSent: fakePayload,
     fakeMessageId,
-    note: 'Verifique a aba Diagnóstico em Settings: deve aparecer um novo webhook_log com source=meta-whatsapp em poucos segundos.',
+    resolvedFrom: resolved.source,
+    businessUnitId: resolved.businessUnitId,
+    note: `Webhook disparado usando phoneNumberId resolvido de ${resolved.source}. Veja o novo log abaixo em segundos.`,
   });
 }

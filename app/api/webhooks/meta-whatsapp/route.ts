@@ -18,6 +18,7 @@ import { NextResponse } from 'next/server'
 import { createStaticAdminClient } from '@/lib/supabase/server'
 import { onResponseReceived } from '@/lib/automation/triggers'
 import { processWithSuperAgent } from '@/lib/ai/super-agent/engine'
+import { resolveMetaConfigByPhoneNumberId } from '@/lib/communication/meta-config-resolver'
 
 export const runtime = 'nodejs'
 
@@ -112,27 +113,17 @@ function normalizeMetaPhone(from: string): string {
 type AdminClient = ReturnType<typeof createStaticAdminClient>
 
 /**
- * Resolve a organização dona deste número Meta (phone_number_id) lendo
- * organization_settings.meta_whatsapp_config. Usado como fallback quando
- * não conseguimos resolver via deal ativo.
+ * Resolve a organização dona deste número Meta (phone_number_id).
+ * Olha em ambos lugares: organization_settings.meta_whatsapp_config E
+ * business_unit_channel_settings.config (para orgs Multi-BU). Veja
+ * lib/communication/meta-config-resolver.ts.
  */
 async function resolveOrganizationByPhoneNumberId(
   supabase: AdminClient,
   phoneNumberId: string | null | undefined
 ): Promise<string | null> {
-  if (!phoneNumberId) return null
-  const { data } = await supabase
-    .from('organization_settings')
-    .select('organization_id, meta_whatsapp_config')
-    .not('meta_whatsapp_config', 'is', null)
-
-  const match = data?.find((row) => {
-    const cfg = (row as Record<string, unknown>).meta_whatsapp_config as
-      | { phoneNumberId?: string }
-      | null
-    return cfg?.phoneNumberId === phoneNumberId
-  })
-  return (match as Record<string, unknown> | undefined)?.organization_id as string | null ?? null
+  const resolved = await resolveMetaConfigByPhoneNumberId(supabase, phoneNumberId)
+  return resolved?.organizationId ?? null
 }
 
 async function findContactByPhone(
