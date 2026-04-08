@@ -185,6 +185,66 @@ export function useRealtimeSync(
           // Instead of refetching per-row, batch within the same tick using a microtask.
           // This keeps UI instant (optimistic updates handle UX) while preventing refetch storms.
           if (payload.eventType === 'INSERT') {
+            // SPECIAL HANDLING FOR MESSAGES INSERT:
+            // Mesma lógica dos deals — invalidar causa refetch que remove a
+            // mensagem otimista (status='sending'). Em vez disso, mescla a
+            // nova mensagem direto no cache de ['messages', conversationId],
+            // dedup por id (real OU temp com mesmo body).
+            if (table === 'messages') {
+              const newData = payload.new as Record<string, unknown>;
+              const messageId = newData.id as string;
+              const conversationId = newData.conversation_id as string;
+              if (!messageId || !conversationId) return;
+
+              // Dedup multi-instância (vários hooks no mesmo cliente)
+              const dedupeKey = `messages-${messageId}`;
+              if (!shouldProcessInsert(dedupeKey)) return;
+
+              // Normaliza snake_case -> camelCase para casar com o tipo Message
+              const normalized = {
+                id: messageId,
+                organizationId: newData.organization_id as string,
+                conversationId,
+                waMessageId: (newData.wa_message_id as string | null) ?? null,
+                externalMessageId: (newData.external_message_id as string | null) ?? null,
+                channel: (newData.channel as string) ?? 'whatsapp',
+                messageType: (newData.message_type as string) ?? 'text',
+                direction: newData.direction as string,
+                body: (newData.body as string) ?? '',
+                mediaUrl: (newData.media_url as string | null) ?? null,
+                status: (newData.status as string) ?? 'sent',
+                sentAt: newData.sent_at as string,
+                createdAt: newData.created_at as string,
+                metadata: (newData.metadata as Record<string, unknown> | null) ?? {},
+              } as unknown as Record<string, unknown>;
+
+              const cacheKey = ['messages', conversationId] as const;
+              queryClient.setQueryData<Record<string, unknown>[]>(cacheKey, (old) => {
+                if (!old) return [normalized];
+                // Já tem essa mensagem real? Substitui (caso de UPDATE de status, etc.)
+                const existingIdx = old.findIndex((m) => m.id === messageId);
+                if (existingIdx !== -1) {
+                  return old.map((m, i) => (i === existingIdx ? { ...m, ...normalized } : m));
+                }
+                // Tem alguma temp com mesmo body+direction? Substitui (otimista virou real)
+                const tempIdx = old.findIndex(
+                  (m) =>
+                    typeof m.id === 'string' &&
+                    m.id.startsWith('temp-') &&
+                    m.body === normalized.body &&
+                    m.direction === normalized.direction,
+                );
+                if (tempIdx !== -1) {
+                  return old.map((m, i) => (i === tempIdx ? normalized : m));
+                }
+                // Nova mensagem (inbound do lead ou outbound de outro cliente)
+                return [...old, normalized];
+              });
+
+              // NÃO invalidar — já mesclamos.
+              return;
+            }
+
             // SPECIAL HANDLING FOR DEALS INSERT:
             // Instead of invalidating (which causes refetch that removes temp deal),
             // add the deal directly to the cache. This prevents the "flash and disappear" bug.
@@ -347,6 +407,33 @@ export function useRealtimeSync(
           } else {
             // For deals UPDATE: apply directly to cache to avoid race condition with optimistic updates
             // When user moves a deal:
+            // SPECIAL HANDLING FOR MESSAGES UPDATE:
+            // Quando a Meta confirma delivered/read, o webhook UPDATE em
+            // messages.status. Mesclar direto no cache (sem invalidar) pra
+            // não disparar refetch e ver os ticks atualizarem em tempo real.
+            if (payload.eventType === 'UPDATE' && table === 'messages') {
+              const newData = payload.new as Record<string, unknown>;
+              const messageId = newData.id as string;
+              const conversationId = newData.conversation_id as string;
+              if (!messageId || !conversationId) return;
+
+              const cacheKey = ['messages', conversationId] as const;
+              queryClient.setQueryData<Record<string, unknown>[]>(cacheKey, (old) => {
+                if (!old) return old;
+                return old.map((m) =>
+                  m.id === messageId
+                    ? {
+                        ...m,
+                        status: (newData.status as string) ?? m.status,
+                        body: (newData.body as string) ?? m.body,
+                        mediaUrl: (newData.media_url as string | null) ?? m.mediaUrl,
+                      }
+                    : m,
+                );
+              });
+              return;
+            }
+
             // 1. Optimistic update moves it visually
             // 2. Server confirms
             // 3. Realtime UPDATE arrives

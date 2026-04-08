@@ -108,5 +108,26 @@ export async function POST(req: Request) {
     .update({ last_message_at: new Date().toISOString(), updated_at: new Date().toISOString() })
     .eq('id', conversationId);
 
-  return NextResponse.json({ ok: true, message });
+  // Normaliza snake_case (Supabase) -> camelCase (tipo Message do projeto).
+  // Idem ao /api/conversations/[id]/messages GET. Sem isso, useSendMessage
+  // não consegue substituir a temp inline (ficaria com sentAt undefined).
+  const m = message as Record<string, unknown>;
+  const camelMessage = {
+    id: m.id as string,
+    organizationId: m.organization_id as string,
+    conversationId: m.conversation_id as string,
+    waMessageId: (m.wa_message_id as string | null) ?? null,
+    externalMessageId: (m.external_message_id as string | null) ?? null,
+    channel: (m.channel as string) ?? 'whatsapp',
+    messageType: (m.message_type as string) ?? 'text',
+    direction: m.direction as string,
+    body: (m.body as string) ?? '',
+    mediaUrl: (m.media_url as string | null) ?? null,
+    status: m.status as string,
+    sentAt: m.sent_at as string,
+    createdAt: m.created_at as string,
+    metadata: (m.metadata as Record<string, unknown> | null) ?? {},
+  };
+
+  return NextResponse.json({ ok: true, message: camelMessage });
 }

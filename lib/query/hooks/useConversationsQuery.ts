@@ -240,10 +240,24 @@ export function useSendMessage() {
       }
       queryClient.setQueryData<Message[]>(context.messagesKey, failed);
     },
-    onSuccess: (_, variables) => {
-      void queryClient.invalidateQueries({ queryKey: conversationKeys.messages(variables.conversationId) });
+    onSuccess: (data, variables, context) => {
+      // CRÍTICO: substituir a temp INLINE em vez de invalidar+refetch.
+      // Invalidar causa o bug "aparece e some" porque o realtime do messages
+      // dispara em paralelo e o refetch não inclui a temp (que é client-only).
+      const messagesKey = conversationKeys.messages(variables.conversationId);
+      const serverMessage = data?.message;
+      if (serverMessage && context?.tempId) {
+        queryClient.setQueryData<Message[]>(messagesKey, (old) => {
+          if (!old) return [serverMessage];
+          // Remove a temp e qualquer duplicata por id real
+          const withoutTemp = old.filter(
+            (m) => m.id !== context.tempId && m.id !== serverMessage.id,
+          );
+          return [...withoutTemp, serverMessage];
+        });
+      }
+      // Lista de conversas pode mudar (last_message_at) — pode invalidar.
       void queryClient.invalidateQueries({ queryKey: conversationKeys.lists() });
-      void queryClient.invalidateQueries({ queryKey: conversationKeys.all });
     },
   });
 }
