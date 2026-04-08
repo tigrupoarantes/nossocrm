@@ -111,6 +111,45 @@ function normalizeMetaPhone(from: string): string {
 
 type AdminClient = ReturnType<typeof createStaticAdminClient>
 
+/**
+ * Resolve a organização dona deste número Meta (phone_number_id) lendo
+ * organization_settings.meta_whatsapp_config. Usado como fallback quando
+ * não conseguimos resolver via deal ativo.
+ */
+async function resolveOrganizationByPhoneNumberId(
+  supabase: AdminClient,
+  phoneNumberId: string | null | undefined
+): Promise<string | null> {
+  if (!phoneNumberId) return null
+  const { data } = await supabase
+    .from('organization_settings')
+    .select('organization_id, meta_whatsapp_config')
+    .not('meta_whatsapp_config', 'is', null)
+
+  const match = data?.find((row) => {
+    const cfg = (row as Record<string, unknown>).meta_whatsapp_config as
+      | { phoneNumberId?: string }
+      | null
+    return cfg?.phoneNumberId === phoneNumberId
+  })
+  return (match as Record<string, unknown> | undefined)?.organization_id as string | null ?? null
+}
+
+async function findContactByPhone(
+  supabase: AdminClient,
+  organizationId: string,
+  phone: string
+): Promise<string | null> {
+  const { data } = await supabase
+    .from('contacts')
+    .select('id')
+    .eq('organization_id', organizationId)
+    .ilike('phone', `%${phone}%`)
+    .limit(1)
+    .maybeSingle()
+  return (data?.id as string | undefined) ?? null
+}
+
 async function findActiveDealByPhone(
   supabase: AdminClient,
   phone: string
@@ -221,6 +260,8 @@ export async function POST(request: Request) {
       const value = change.value
       const messages = value.messages ?? []
 
+      const phoneNumberId = value.metadata?.phone_number_id ?? null
+
       for (const message of messages) {
         // Apenas processar mensagens de texto por enquanto
         if (message.type !== 'text' || !message.text?.body) continue
@@ -234,40 +275,60 @@ export async function POST(request: Request) {
         if (!fromRaw) continue
 
         const normalizedPhone = normalizeMetaPhone(fromRaw)
-        // Meta usa formato sem @c.us — normalizar para o padrão interno
-        const waChatId = `${normalizedPhone}@s.whatsapp.net`
+        // Padrão usado pelo lado outbound (app/api/deals/[id]/conversations/route.ts):
+        // "5511...@c.us". Manter o mesmo formato é o que faz o webhook achar a
+        // mesma conversa em vez de criar duplicata.
+        const waChatId = `${normalizedPhone}@c.us`
 
-        // Buscar deal ativo para disparar automação
-        const match = await findActiveDealByPhone(supabase, normalizedPhone)
+        // 1) Tentar resolver via deal ativo (ainda usado pela automação)
+        const dealMatch = await findActiveDealByPhone(supabase, normalizedPhone)
 
-        if (!match?.organizationId) continue
+        // 2) Fallback: resolver org pelo phone_number_id da Meta
+        const organizationId =
+          dealMatch?.organizationId ??
+          (await resolveOrganizationByPhoneNumberId(supabase, phoneNumberId))
 
-        // Persistir conversa e mensagem
+        if (!organizationId) {
+          console.warn(
+            '[MetaWebhook] inbound dropped — no org for phone_number_id=%s from=%s',
+            phoneNumberId,
+            fromRaw,
+          )
+          continue
+        }
+
+        // 3) Tentar achar contato dessa org pelo telefone (para vincular)
+        const contactId = await findContactByPhone(supabase, organizationId, normalizedPhone)
+
+        // 4) Persistir conversa e mensagem (upsert agora casa pelo @c.us)
         await upsertConversationAndMessage(supabase, {
-          organizationId: match.organizationId,
-          contactId: null,
-          dealId: match.dealId ?? null,
+          organizationId,
+          contactId,
+          dealId: dealMatch?.dealId ?? null,
           waChatId,
           waMessageId: messageId,
           body,
           sentAt,
         })
 
-        await onResponseReceived(match)
+        // 5) Automação só faz sentido se houver deal vinculado
+        if (dealMatch) {
+          await onResponseReceived(dealMatch)
+        }
 
-        // Super Agente em background
+        // 6) Super Agente em background
         if (body) {
           void Promise.resolve(
             supabase
               .from('conversations')
               .select('id')
-              .eq('organization_id', match.organizationId)
+              .eq('organization_id', organizationId)
               .eq('wa_chat_id', waChatId)
               .single()
           ).then(({ data: conv }) => {
             if (!conv?.id) return
             return processWithSuperAgent(supabase, {
-              organizationId: match.organizationId,
+              organizationId,
               conversationId: conv.id,
               contactPhone: normalizedPhone,
               inboundMessage: body,
