@@ -2,7 +2,7 @@
 // Minimal Service Worker (MVP): cache app shell assets for faster launch.
 // Note: This does NOT provide offline data sync.
 
-const CACHE_NAME = 'nossocrm-shell-v2';
+const CACHE_NAME = 'nossocrm-shell-v3';
 const SHELL_URLS = [
   '/',
   '/login',
@@ -46,13 +46,21 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Stale-while-revalidate for static assets.
+  // Never cache Next.js chunks (_next/static/chunks/*) — they have content-hash
+  // filenames and are immutable. Caching them causes 404s after deploy because
+  // the SW serves stale references to chunks that no longer exist on the server.
+  // Let the browser's built-in HTTP cache handle them (Vercel sets proper headers).
+  if (req.url.includes('/_next/')) return;
+
+  // Stale-while-revalidate for other static assets (icons, images).
   event.respondWith(
     caches.match(req).then((cached) => {
       const fetchPromise = fetch(req)
         .then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE_NAME).then((c) => c.put(req, copy)).catch(() => {});
+          if (res.ok) {
+            const copy = res.clone();
+            caches.open(CACHE_NAME).then((c) => c.put(req, copy)).catch(() => {});
+          }
           return res;
         })
         .catch(() => cached);

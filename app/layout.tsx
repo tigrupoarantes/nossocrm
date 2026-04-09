@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google'
 import './globals.css'
 import { ServiceWorkerRegister } from '@/components/pwa/ServiceWorkerRegister'
 import { InstallBanner } from '@/components/pwa/InstallBanner'
+import { ChunkErrorHandler } from '@/components/ChunkErrorHandler'
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
 
@@ -31,6 +32,7 @@ export default function RootLayout({
       <body className={`${inter.variable} font-sans antialiased bg-[var(--color-bg)] text-[var(--color-text-primary)]`}>
         <ServiceWorkerRegister />
         <InstallBanner />
+        <ChunkErrorHandler />
         {children}
       </body>
     </html>
