@@ -272,11 +272,14 @@ async function persistInboundMessage(
       status: 'delivered',
       sent_at: params.sentAt,
     },
-    { onConflict: 'organization_id,external_message_id', ignoreDuplicates: true }
+    // Usar constraint não-parcial (organization_id, wa_message_id).
+    // A parcial idx_messages_external_unique não funciona com PostgREST ON CONFLICT.
+    { onConflict: 'organization_id,wa_message_id', ignoreDuplicates: true }
   )
 
   if (msgErr) {
-    console.error('[MetaWebhook] failed to insert message', { error: msgErr.message, conversationId })
+    console.error('[MetaWebhook] failed to insert message', { error: msgErr.message, conversationId, waMessageId: params.waMessageId })
+    return null
   }
 
   return conversationId

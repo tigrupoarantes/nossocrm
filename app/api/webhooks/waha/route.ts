@@ -248,6 +248,10 @@ async function persistInboundMessage(
     conversationId = newConv.id as string;
   }
 
+  // Usar a constraint não-parcial (organization_id, wa_message_id) para o upsert.
+  // A constraint parcial idx_messages_external_unique (organization_id, external_message_id
+  // WHERE external_message_id IS NOT NULL) NÃO funciona com PostgREST ON CONFLICT —
+  // causa erro silencioso e a mensagem nunca é persistida.
   const { error: msgErr } = await supabase.from('messages').upsert(
     {
       organization_id: params.organizationId,
@@ -261,11 +265,12 @@ async function persistInboundMessage(
       status: 'delivered',
       sent_at: params.sentAt,
     },
-    { onConflict: 'organization_id,external_message_id', ignoreDuplicates: true },
+    { onConflict: 'organization_id,wa_message_id', ignoreDuplicates: true },
   );
 
   if (msgErr) {
-    console.error('[WahaWebhook] failed to insert message', { error: msgErr.message, conversationId });
+    console.error('[WahaWebhook] failed to insert message', { error: msgErr.message, conversationId, waMessageId: params.waMessageId });
+    return null;
   }
 
   return conversationId;
