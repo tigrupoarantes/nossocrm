@@ -6,7 +6,7 @@
 import { streamText } from 'ai';
 import { z } from 'zod';
 import { requireAITaskContext, AITaskHttpError } from '@/lib/ai/tasks/server';
-import { buildLandingPagePrompt, buildRefinementPrompt } from '@/features/landing-pages/lib/page-generator';
+import { buildLandingPagePrompt, buildRefinementPrompt, isLiteModel } from '@/features/landing-pages/lib/page-generator';
 
 // 300s = 5 min. Vercel Pro permite até 800s. Geração premium de landing
 // page completa com modelos lentos (Flash variants) pode passar de 120s.
@@ -40,7 +40,7 @@ function json(body: unknown, status = 200) {
 
 export async function POST(req: Request) {
   try {
-    const { model } = await requireAITaskContext(req);
+    const { model, modelId } = await requireAITaskContext(req);
 
     const body = await req.json().catch(() => null);
     const parsed = GenerateSchema.safeParse(body);
@@ -62,7 +62,13 @@ export async function POST(req: Request) {
           formFields,
           thankYouMessage,
           thankYouRedirectUrl,
+          modelId,
         });
+
+    const useLite = isLiteModel(modelId);
+    if (useLite) {
+      console.info('[generate] Using LITE prompt for model:', modelId);
+    }
 
     // 16384 cobre todos os providers suportados (gpt-4o teto, Gemini 2.0+, Claude Sonnet 4.5).
     // 8192 era pequeno demais — landing pages premium completas precisam de ~12-15K tokens

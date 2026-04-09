@@ -5,7 +5,9 @@ import { useRouter } from 'next/navigation';
 import {
   ArrowLeft, Globe, Save, Loader2, Send, Sparkles,
   BarChart3, CheckCircle2, AlertCircle, Target, ExternalLink, ImagePlus,
+  Upload, Check,
 } from 'lucide-react';
+import { useUploadLandingPageImage } from '../hooks/useLandingPageAssets';
 import { useLandingPage, useCreateLandingPage, useUpdateLandingPage } from '../hooks/useLandingPages';
 import { useGeneratePage } from '../hooks/useGeneratePage';
 import { generateSlug } from '../lib/slug-utils';
@@ -13,6 +15,7 @@ import { LivePreview } from './LivePreview';
 import { PublishDialog } from './PublishDialog';
 import { SubmissionsList } from './SubmissionsList';
 import { useBoards } from '@/lib/query/hooks/useBoardsQuery';
+import { useAuth } from '@/context/AuthContext';
 import type { LandingPage } from '@/types';
 
 // ---------------------------------------------------------------------------
@@ -38,6 +41,15 @@ const SUGGESTIONS = [
   'Landing page de lançamento para um produto SaaS',
 ];
 
+const REFINEMENT_SUGGESTIONS = [
+  'Trocar a paleta de cores para algo mais quente',
+  'Melhorar o hero — mais impactante e com prova social',
+  'Adicionar mais depoimentos de clientes',
+  'Mudar o CTA para algo mais urgente',
+  'Tornar mais visual, com fotos maiores',
+  'Simplificar — menos seções, mais direto ao ponto',
+];
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -52,6 +64,7 @@ export function LandingPageBuilder({ landingPageId }: LandingPageBuilderProps) {
   const updateMutation = useUpdateLandingPage();
   const generateMutation = useGeneratePage();
   const { data: boards } = useBoards();
+  const { organizationId } = useAuth();
 
   // Core state
   const [title, setTitle] = useState('');
@@ -73,6 +86,14 @@ export function LandingPageBuilder({ landingPageId }: LandingPageBuilderProps) {
   const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>('desktop');
   const [showPublishDialog, setShowPublishDialog] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>('builder');
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [isDragging, setIsDragging] = useState(false);
+
+  // Upload de imagens
+  const uploadMutation = useUploadLandingPageImage();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageResolveRef = useRef<((url: string | null) => void) | null>(null);
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // -------------------------------------------------------------------------
   // Hydrate com LP existente
@@ -94,7 +115,6 @@ export function LandingPageBuilder({ landingPageId }: LandingPageBuilderProps) {
         },
       ]);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [existingLP]);
 
   // Scroll automático no chat
@@ -134,6 +154,99 @@ export function LandingPageBuilder({ landingPageId }: LandingPageBuilderProps) {
     const id = savedId ?? landingPageId;
     if (id) {
       await updateMutation.mutateAsync({ id, targetBoardId, targetStageId: stageId });
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Auto-save debounced (quando o editor visual envia HTML editado)
+  // -------------------------------------------------------------------------
+  function handleEditorHtmlChange(newHtml: string) {
+    setHtmlContent(newHtml);
+    setLiveHtml(newHtml);
+
+    const id = savedId ?? landingPageId;
+    if (!id || isGenerating) return;
+
+    // Debounce 2s
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    setSaveStatus('idle');
+    autoSaveTimerRef.current = setTimeout(async () => {
+      setSaveStatus('saving');
+      try {
+        await updateMutation.mutateAsync({ id, htmlContent: newHtml });
+        setSaveStatus('saved');
+        setTimeout(() => setSaveStatus('idle'), 2000);
+      } catch {
+        setSaveStatus('idle');
+      }
+    }, 2000);
+  }
+
+  // -------------------------------------------------------------------------
+  // Upload de imagem (file picker ou drag-and-drop)
+  // -------------------------------------------------------------------------
+  async function handleImageFile(file: File): Promise<string | null> {
+    const orgId = organizationId;
+    const lpId = savedId ?? landingPageId;
+    if (!orgId || !lpId) return null;
+
+    try {
+      return await uploadMutation.mutateAsync({ orgId, lpId, file });
+    } catch {
+      return null;
+    }
+  }
+
+  // Chamado pelo LivePreview quando user clica em "Trocar imagem"
+  async function handleRequestImageUpload(): Promise<string | null> {
+    return new Promise((resolve) => {
+      imageResolveRef.current = resolve;
+      fileInputRef.current?.click();
+    });
+  }
+
+  async function handleFileInputChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // reset para permitir mesmo arquivo
+    if (!file) {
+      imageResolveRef.current?.(null);
+      imageResolveRef.current = null;
+      return;
+    }
+    const url = await handleImageFile(file);
+    if (imageResolveRef.current) {
+      imageResolveRef.current(url);
+      imageResolveRef.current = null;
+    } else if (url) {
+      // Upload via botão do chat — injeta no input
+      setInputValue(prev => {
+        const prefix = prev.trim() ? prev.trim() + '\n' : '';
+        return prefix + `Use esta imagem na página: ${url}`;
+      });
+    }
+  }
+
+  // Drag and drop na área do chat
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    setIsDragging(true);
+  }
+
+  function handleDragLeave() {
+    setIsDragging(false);
+  }
+
+  async function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (!file || !file.type.startsWith('image/')) return;
+    const url = await handleImageFile(file);
+    if (url) {
+      setInputValue(prev => {
+        const prefix = prev.trim() ? prev.trim() + '\n' : '';
+        return prefix + `Use esta imagem na página: ${url}`;
+      });
     }
   }
 
@@ -307,6 +420,18 @@ export function LandingPageBuilder({ landingPageId }: LandingPageBuilderProps) {
           <span className="hidden sm:inline">Salvar</span>
         </button>
 
+        {/* Indicador de auto-save */}
+        {saveStatus === 'saving' && (
+          <span className="text-xs text-slate-400 flex items-center gap-1 shrink-0">
+            <Loader2 size={12} className="animate-spin" /> Salvando...
+          </span>
+        )}
+        {saveStatus === 'saved' && (
+          <span className="text-xs text-green-500 flex items-center gap-1 shrink-0">
+            <Check size={12} /> Salvo
+          </span>
+        )}
+
         {currentStatus === 'published' && slug && (
           <a
             href={`/p/${slug}`}
@@ -357,7 +482,20 @@ export function LandingPageBuilder({ landingPageId }: LandingPageBuilderProps) {
         <div className="flex flex-col lg:flex-row gap-4 flex-1 min-h-0 pt-4">
 
           {/* Painel esquerdo — Chat */}
-          <div className="w-full lg:w-80 shrink-0 flex flex-col gap-2 min-h-0">
+          <div
+            className={`w-full lg:w-80 shrink-0 flex flex-col gap-2 min-h-0 relative ${isDragging ? 'ring-2 ring-primary-500 ring-inset rounded-xl' : ''}`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
+            {isDragging && (
+              <div className="absolute inset-0 bg-primary-50/80 dark:bg-primary-900/30 rounded-xl z-20 flex items-center justify-center pointer-events-none">
+                <div className="flex flex-col items-center gap-2 text-primary-600 dark:text-primary-400">
+                  <Upload size={32} />
+                  <span className="text-sm font-medium">Solte a imagem aqui</span>
+                </div>
+              </div>
+            )}
 
             {/* Histórico de mensagens */}
             <div className="flex-1 overflow-y-auto space-y-3 min-h-0 pr-1">
@@ -419,6 +557,25 @@ export function LandingPageBuilder({ landingPageId }: LandingPageBuilderProps) {
                   </div>
                 ))
               )}
+
+              {/* Sugestões de refinamento após primeira geração */}
+              {isRefinement && !isGenerating && messages.length > 0 && (
+                <div className="space-y-1.5 pt-2">
+                  <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">Sugestões</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {REFINEMENT_SUGGESTIONS.slice(0, 4).map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => setInputValue(s)}
+                        className="text-[11px] px-2.5 py-1.5 rounded-full border border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors"
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div ref={messagesEndRef} />
             </div>
 
@@ -480,19 +637,14 @@ export function LandingPageBuilder({ landingPageId }: LandingPageBuilderProps) {
               <div className="absolute right-2 bottom-2.5 flex items-center gap-1">
                 <button
                   onClick={() => {
-                    const url = window.prompt('Cole a URL da imagem que deseja usar na landing page:');
-                    if (url?.trim()) {
-                      setInputValue(prev => {
-                        const prefix = prev.trim() ? prev.trim() + '\n' : '';
-                        return prefix + `Use esta imagem na página: ${url.trim()}`;
-                      });
-                    }
+                    imageResolveRef.current = null;
+                    fileInputRef.current?.click();
                   }}
-                  disabled={isGenerating}
+                  disabled={isGenerating || uploadMutation.isPending}
                   className="p-1.5 rounded-lg text-slate-400 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-slate-100 dark:hover:bg-white/5 disabled:opacity-40 transition-colors"
-                  title="Anexar imagem (URL)"
+                  title="Upload de imagem (JPEG, PNG, WebP)"
                 >
-                  <ImagePlus size={14} />
+                  {uploadMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <ImagePlus size={14} />}
                 </button>
                 <button
                   onClick={handleSubmit}
@@ -515,10 +667,8 @@ export function LandingPageBuilder({ landingPageId }: LandingPageBuilderProps) {
               mode={previewMode}
               onModeChange={setPreviewMode}
               isGenerating={isGenerating && !liveHtml && !htmlContent}
-              onHtmlEdit={(newHtml) => {
-                setHtmlContent(newHtml);
-                setLiveHtml(newHtml);
-              }}
+              onHtmlEdit={handleEditorHtmlChange}
+              onRequestImageUpload={handleRequestImageUpload}
             />
           </div>
         </div>
@@ -539,6 +689,15 @@ export function LandingPageBuilder({ landingPageId }: LandingPageBuilderProps) {
           onClose={() => setShowPublishDialog(false)}
         />
       )}
+
+      {/* Input oculto para upload de imagens (file picker) */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/gif"
+        className="hidden"
+        onChange={handleFileInputChange}
+      />
     </div>
   );
 }

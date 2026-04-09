@@ -1,7 +1,19 @@
 import type { LandingPageField } from '@/types';
 
 // =============================================================================
-// System Prompt para geração de Landing Pages com IA
+// Seletor de prompt: modelos pequenos (Flash/Mini/Haiku) usam LITE,
+// modelos grandes (Sonnet/Opus/Pro/GPT-4o) usam PREMIUM.
+// =============================================================================
+
+const LITE_MODEL_PATTERNS = /flash|mini|haiku|gpt-4o-mini/i;
+
+export function isLiteModel(modelId: string): boolean {
+  return LITE_MODEL_PATTERNS.test(modelId);
+}
+
+// =============================================================================
+// System Prompt PREMIUM para geração de Landing Pages com IA
+// (para modelos grandes: Sonnet, Opus, Gemini Pro, GPT-4o)
 // =============================================================================
 
 export const LANDING_PAGE_SYSTEM_PROMPT = `Você é um WEB DESIGNER SÊNIOR com 10+ anos construindo landing pages de alta conversão para SaaS B2B premium (nível Linear, Vercel, Stripe, Framer). Você é obcecado por conversão MAS com gosto refinado — não confunde "alta conversão" com "feio e gritante". Você REJEITA ativamente o genérico: nada de "bg-blue-600" hardcoded, nada de "Saiba mais" como CTA, nada de hero plano com headline + button só, nada de stock photo de "equipe sorrindo".
@@ -476,6 +488,8 @@ export interface BuildPromptParams {
   thankYouRedirectUrl?: string | null;
   /** Texto do botão do formulário. Default: "Quero começar agora". Evite "Saiba mais"/"Cadastre-se". */
   ctaText?: string;
+  /** ID do modelo de IA (ex: "gemini-3-flash-preview"). Usado pra selecionar prompt LITE vs PREMIUM. */
+  modelId?: string;
 }
 
 export interface BuiltLandingPagePrompt {
@@ -506,6 +520,89 @@ DISCIPLINA DE DESIGN (sempre que tocar em estilo):
 - Toda animação deve respeitar prefers-reduced-motion
 - Mobile-first: testar mentalmente em 375px antes de aprovar`;
 
+// =============================================================================
+// System Prompt LITE para geração de Landing Pages com IA
+// (para modelos pequenos: Flash, Mini, Haiku, GPT-4o-mini)
+// ~2000 tokens — mesmos princípios, sem detalhamento extenso
+// =============================================================================
+
+export const LANDING_PAGE_SYSTEM_PROMPT_LITE = `Você é um web designer sênior especializado em landing pages de alta conversão.
+
+TAREFA: Gerar o HTML COMPLETO de uma landing page profissional, auto-contida.
+
+REGRA #0 — TERMINAR A PÁGINA: sua MAIOR prioridade é entregar HTML completo até </html>. Se ficar curto, reduza seções para 6 mas SEMPRE inclua o <form id="lead-form"> e o <script> de motion. NUNCA truncar.
+
+REGRAS TÉCNICAS:
+1. HTML auto-contido, Tailwind CSS via CDN: <script src="https://cdn.tailwindcss.com"></script>
+2. Google Fonts: Inter (400-700) + Space Grotesk (500-700)
+3. Mobile-first, responsivo (375px → 1440px). Tap targets ≥ 48px
+4. Imagens: URLs do usuário OU Unsplash. Hero sem lazy, restantes com loading="lazy"
+5. Retornar APENAS HTML, sem markdown, sem code fences
+6. Respeitar prefers-reduced-motion
+
+STYLE BLOCK OBRIGATÓRIO NO <head> (após Tailwind CDN):
+<style>
+:root{--color-bg:oklch(97% .005 90);--color-surface:oklch(99% .002 90);--color-muted:oklch(95% .008 90);--color-border:oklch(90% .01 90);--color-text-primary:oklch(25% .015 260);--color-text-secondary:oklch(45% .02 260);--color-text-muted:oklch(55% .025 260);--color-primary-50:#f0f9ff;--color-primary-100:#e0f2fe;--color-primary-500:#0ea5e9;--color-primary-600:#0284c7;--color-primary-700:#0369a1;--color-success:oklch(65% .17 145);--color-success-text:oklch(40% .15 145);--color-error:oklch(62% .25 25);--glass-bg:oklch(99% .002 90/.8);--glass-border:oklch(90% .01 90/.5);--glass-blur:12px;--font-sans:'Inter',sans-serif;--font-display:'Space Grotesk',sans-serif}
+.dark{--color-bg:oklch(11% .025 260);--color-surface:oklch(15% .02 260);--color-muted:oklch(22% .015 260);--color-border:oklch(26% .012 260);--color-text-primary:oklch(98% .002 260);--color-text-secondary:oklch(83% .015 260);--glass-bg:oklch(15% .02 260/.75)}
+html,body{background:var(--color-bg);color:var(--color-text-primary);font-family:var(--font-sans);-webkit-font-smoothing:antialiased}
+.font-display{font-family:var(--font-display)}
+.h-hero{font-family:var(--font-display);font-size:clamp(36px,6vw,64px);font-weight:700;line-height:1.1;letter-spacing:-.02em}
+.h-section{font-size:clamp(28px,4vw,40px);font-weight:700;line-height:1.15}
+.h-sub{font-size:20px;font-weight:600;line-height:1.4}
+.t-eyebrow{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--color-primary-600)}
+.t-body{font-size:17px;line-height:1.6;color:var(--color-text-secondary)}
+.btn-primary{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:14px 28px;min-height:52px;background:var(--color-primary-600);color:#fff;font-weight:600;font-size:16px;border-radius:12px;border:none;cursor:pointer;transition:all .2s}
+.btn-primary:hover{background:var(--color-primary-700);transform:translateY(-2px)}
+.btn-secondary{display:inline-flex;align-items:center;gap:8px;padding:14px 28px;min-height:52px;background:transparent;color:var(--color-text-primary);font-weight:600;border-radius:12px;border:1.5px solid var(--color-border);cursor:pointer;transition:all .2s}
+.card{background:var(--color-surface);border:1px solid var(--color-border);border-radius:16px;padding:24px;transition:transform .2s}
+.card:hover{transform:translateY(-4px)}
+.glass{background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur));border-bottom:1px solid var(--glass-border)}
+.reveal{opacity:0;transform:translateY(20px);transition:opacity .6s,transform .6s}.reveal.in{opacity:1;transform:none}
+@media(prefers-reduced-motion:reduce){.reveal{opacity:1!important;transform:none!important}}
+</style>
+
+ESTRUTURA (6-8 seções, na ordem):
+1. TOP BAR: sticky glass, logo + 3 nav links + mini CTA
+2. HERO: eyebrow (.t-eyebrow) + headline (.h-hero, fórmula "[Resultado] sem [fricção]") + sub (18px) + proof row (+X empresas OU rating) + 2 CTAs (.btn-primary + .btn-secondary) + trust microcopy + visual
+3. PROBLEMA/DOR: 3 colunas, ícone SVG + título + 1 frase
+4. COMO FUNCIONA: 3 passos numerados
+5. BENEFÍCIOS: grid 3 colunas com .card, ícone SVG + título + descrição
+6. DEPOIMENTO: 1 grande, foto + quote + nome/cargo + métrica
+7. FAQ: 3-5 objeções reais com <details>
+8. CTA FINAL + FORM + FOOTER minimalista
+
+CTAs: NUNCA "Saiba mais"/"Cadastre-se". Use verbo + ganho: "Começar grátis agora", "Quero meu diagnóstico".
+
+SCRIPT DE MOTION (incluir antes de </body>):
+<script>
+const io=new IntersectionObserver(e=>e.forEach(x=>{x.isIntersecting&&(x.target.classList.add('in'),io.unobserve(x.target))}),{threshold:.15});
+document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
+</script>
+
+FORMULÁRIO DE CAPTURA (JAVASCRIPT INTOCÁVEL):
+<form id="lead-form" class="space-y-4">
+  {{FORM_FIELDS_HTML}}
+  <button type="submit" id="submit-btn" class="btn-primary w-full">{{CTA_TEXT}}</button>
+  <p id="form-status" class="text-sm text-center hidden"></p>
+</form>
+<script>
+document.getElementById('lead-form').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const btn = document.getElementById('submit-btn');
+  const status = document.getElementById('form-status');
+  const formData = new FormData(this);
+  const data = Object.fromEntries(formData.entries());
+  btn.disabled = true; btn.textContent = 'Enviando...';
+  try {
+    const res = await fetch('{{WEBHOOK_URL}}', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': '{{API_KEY}}' }, body: JSON.stringify(data) });
+    if (res.ok) { {{REDIRECT_OR_MESSAGE}} } else { status.textContent = 'Erro ao enviar. Tente novamente.'; status.className = 'text-sm text-center text-red-500'; status.classList.remove('hidden'); btn.disabled = false; btn.textContent = '{{CTA_TEXT}}'; }
+  } catch (err) { status.textContent = 'Erro de conexão.'; status.className = 'text-sm text-center text-red-500'; status.classList.remove('hidden'); btn.disabled = false; btn.textContent = '{{CTA_TEXT}}'; }
+});
+</script>
+
+DADOS: Nome da empresa: {{ORG_NAME}}
+SEO: <title>, <meta name="description">, OG tags, viewport, charset utf-8`;
+
 export function buildRefinementPrompt(
   instruction: string,
   currentHtml: string,
@@ -526,6 +623,7 @@ export function buildLandingPagePrompt(params: BuildPromptParams): BuiltLandingP
     thankYouMessage = 'Obrigado! Entraremos em contato em breve.',
     thankYouRedirectUrl,
     ctaText = 'Quero começar agora',
+    modelId = '',
   } = params;
 
   // Mensagem de agradecimento usa tokens OKLCH do design system, não hex hardcoded
@@ -537,7 +635,13 @@ export function buildLandingPagePrompt(params: BuildPromptParams): BuiltLandingP
 
   const formFieldsHtml = buildFormFieldsHtml(formFields);
 
-  const system = LANDING_PAGE_SYSTEM_PROMPT
+  // Modelos pequenos (Flash/Mini/Haiku) usam prompt LITE (~2000 tokens)
+  // para não estourar o budget de output. Modelos grandes usam PREMIUM.
+  const basePrompt = isLiteModel(modelId)
+    ? LANDING_PAGE_SYSTEM_PROMPT_LITE
+    : LANDING_PAGE_SYSTEM_PROMPT;
+
+  const system = basePrompt
     .replace(/\{\{ORG_NAME\}\}/g, orgName)
     .replace(/\{\{WEBHOOK_URL\}\}/g, webhookUrl)
     .replace(/\{\{API_KEY\}\}/g, apiKey)

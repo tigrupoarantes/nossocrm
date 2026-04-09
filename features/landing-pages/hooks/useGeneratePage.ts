@@ -24,7 +24,10 @@ export function useGeneratePage() {
   return useMutation({
     mutationFn: async ({ onChunk, ...params }: GeneratePageParams): Promise<GeneratePageResult> => {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 110_000);
+      // Alinhado com maxDuration=300s do server. O client precisa esperar
+      // mais que o server pra deixar a IA terminar — abortar antes era
+      // causa de "página em branco" quando a IA leva 120-180s.
+      const timeout = setTimeout(() => controller.abort(), 310_000);
 
       try {
         const res = await fetch('/api/landing-pages/generate', {

@@ -46,6 +46,7 @@ Se uma tarefa cruza áreas (ex.: feature nova com migration + UI + teste), acion
 - **Sempre** filtrar por `organization_id` em queries multi-tenant e tools de IA.
 - **Antes de migration**: rodar a skill `nossocrm-dba`, validar RLS, conferir índices, e mostrar o SQL pro usuário antes de aplicar.
 - **Antes de tocar webhook/integração**: checar se há simulador em `/settings/diagnostico` e sugerir teste por lá antes de mexer em produção.
+- **Landing pages**: o gerador tem 2 prompts — `LANDING_PAGE_SYSTEM_PROMPT` (premium, modelos grandes) e `LANDING_PAGE_SYSTEM_PROMPT_LITE` (modelos Flash/Mini/Haiku). Seleção é automática via `isLiteModel()`. Nunca truncar — validação `</html>` roda no client E no server (PATCH retorna 422). Upload de imagens via bucket público `landing-page-assets` no Supabase Storage. Editor visual usa contenteditable + postMessage — auto-save com debounce 2s.
 
 ---
 
