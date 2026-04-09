@@ -46,6 +46,15 @@ interface WahaWebhookPayload {
   fromMe?: boolean;
   hasMedia?: boolean;
   timestamp?: number;
+  /** WAHA GOWS engine inclui dados extras com o telefone real em _data.Info.SenderAlt */
+  _data?: {
+    Info?: {
+      SenderAlt?: string;
+      PushName?: string;
+      [key: string]: unknown;
+    };
+    [key: string]: unknown;
+  };
 }
 
 interface WahaWebhookBody {
@@ -59,14 +68,37 @@ interface WahaWebhookBody {
 // ---------------------------------------------------------------------------
 
 /**
- * Remove o sufixo "@c.us", "whatsapp:" e qualquer não-dígito.
- * Retorna somente os dígitos do número.
+ * Remove sufixos conhecidos (@c.us, @s.whatsapp.net, @lid, whatsapp:)
+ * e retorna somente os dígitos do número.
  */
 export function normalizeWahaPhone(raw: string): string {
   return raw
     .replace(/@c\.us$/i, '')
+    .replace(/@s\.whatsapp\.net$/i, '')
+    .replace(/@lid$/i, '')
     .replace(/whatsapp:/gi, '')
     .replace(/[^0-9]/g, '');
+}
+
+/**
+ * Extrai o telefone real do payload WAHA.
+ *
+ * WAHA 2026.x com engine GOWS usa LID (Linked ID) no campo `from`
+ * (ex: "270205083242639@lid") — que NÃO é um telefone. O telefone
+ * real fica em `_data.Info.SenderAlt` (ex: "5516991370740@s.whatsapp.net").
+ *
+ * Fallback chain:
+ *   1. payload._data.Info.SenderAlt (telefone real, formato @s.whatsapp.net)
+ *   2. payload.from se NÃO terminar em @lid (formato legado @c.us)
+ *   3. payload.from como último recurso (LID — vai criar conversa com ID errado, mas não perde a mensagem)
+ */
+export function extractRealPhone(payload: WahaWebhookPayload): string {
+  // Preferir SenderAlt (telefone real) quando disponível
+  const senderAlt = payload?._data?.Info?.SenderAlt;
+  if (typeof senderAlt === 'string' && senderAlt.length > 5) {
+    return senderAlt;
+  }
+  return payload?.from ?? '';
 }
 
 /**
@@ -304,7 +336,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, ignored: true, reason: 'from_me' });
   }
 
-  const fromRaw = payload?.from ?? '';
+  // WAHA GOWS engine usa LID no campo `from` (ex: "270205083242639@lid").
+  // O telefone real fica em `_data.Info.SenderAlt` (ex: "5516991370740@s.whatsapp.net").
+  const fromRaw = payload ? extractRealPhone(payload) : '';
   const messageId = payload?.id ?? '';
   const body = payload?.body ?? '';
   const timestamp = payload?.timestamp ?? Date.now() / 1000;
