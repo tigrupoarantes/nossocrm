@@ -61,11 +61,16 @@ export async function POST(req: Request) {
           thankYouRedirectUrl,
         });
 
+    // 16384 cobre todos os providers suportados (gpt-4o teto, Gemini 2.0+, Claude Sonnet 4.5).
+    // 8192 era pequeno demais — landing pages premium completas precisam de ~12-15K tokens
+    // de output (paleta + tipografia + 10 seções + SVGs inline + motion script + form).
+    // Se ainda assim a geração for truncada, useGeneratePage.ts detecta no client e
+    // lança erro em vez de salvar HTML incompleto.
     const result = streamText({
       model,
       system,
       maxRetries: 0,
-      maxOutputTokens: 8192,
+      maxOutputTokens: 16384,
       messages: [{ role: 'user', content: userPrompt }],
     });
 

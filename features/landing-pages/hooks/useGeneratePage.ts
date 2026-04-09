@@ -65,6 +65,18 @@ export function useGeneratePage() {
           .replace(/\s*```\s*$/, '')
           .trim();
 
+        // Validação anti-truncamento: a IA pode bater em max_tokens e cortar a página
+        // no meio (causa de bug crítico — landing salva sem form de captura, sem CTA
+        // final, sem footer). Se o HTML não termina com </html>, recusamos salvar.
+        const endsClean = /<\/html\s*>\s*$/i.test(cleaned);
+        if (!endsClean) {
+          throw new Error(
+            'A IA gerou uma página INCOMPLETA (atingiu o limite de tokens). ' +
+            'Tente um briefing mais conciso ou peça para a IA cortar uma seção opcional. ' +
+            'A página NÃO foi salva para evitar publicar conteúdo truncado.'
+          );
+        }
+
         return { html: cleaned, model: 'stream' };
       } finally {
         clearTimeout(timeout);
