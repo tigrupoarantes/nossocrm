@@ -74,6 +74,27 @@ export async function PATCH(
     return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
   }
 
+  // Validação ANTI-TRUNCAMENTO server-side. Quando o cliente tenta salvar
+  // html_content, ele DEVE terminar em </html>. Bug histórico: a IA bate em
+  // max_tokens, o stream completa "ok", o cliente salva HTML quebrado (sem
+  // form de captura, sem footer) e tráfego pago morre. A validação client-side
+  // sozinha não basta porque bundle JS pode estar em cache. Esta camada
+  // server garante que NUNCA entra HTML truncado no banco.
+  // Exceção: string vazia explícita (operação de limpar) é permitida.
+  const incomingHtml = updates['html_content'];
+  if (typeof incomingHtml === 'string' && incomingHtml.trim().length > 0) {
+    if (!/<\/html\s*>\s*$/i.test(incomingHtml)) {
+      return NextResponse.json(
+        {
+          error: 'HTML incompleto — a página não termina em </html>. ' +
+            'A IA provavelmente atingiu o limite de tokens. Regenere a página ' +
+            '(use um modelo maior como Claude Sonnet 4.5 ou Gemini Pro se Flash falhar repetidamente).'
+        },
+        { status: 422 }
+      );
+    }
+  }
+
   const { data, error } = await supabase
     .from('landing_pages')
     .update(updates)
