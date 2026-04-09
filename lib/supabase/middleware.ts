@@ -12,10 +12,14 @@ export async function updateSession(request: NextRequest) {
     // O Next renomeou a convenção de `middleware.ts` -> `proxy.ts`.
     // Doc: https://nextjs.org/docs/app/api-reference/file-conventions/proxy
     //
-    // Importante: o Proxy NÃO deve interferir em `/api/*`.
-    // Route Handlers devem responder com 401/403 quando necessário.
-    // Se redirecionarmos `/api/*` para `/login`, quebramos `fetch`/SDKs.
-    if (request.nextUrl.pathname.startsWith('/api')) {
+    // Importante: o Proxy NÃO deve interferir em:
+    // - `/api/*` — Route Handlers devem responder com 401/403 quando necessário.
+    //   Se redirecionarmos `/api/*` para `/login`, quebramos `fetch`/SDKs.
+    // - `/p/*` — landing pages publicadas, servidas a tráfego pago/anônimo.
+    //   O matcher do proxy.ts já exclui ambas, mas mantemos este guard como
+    //   defense-in-depth caso o matcher seja alterado no futuro.
+    const earlyPath = request.nextUrl.pathname
+    if (earlyPath.startsWith('/api') || earlyPath.startsWith('/p/')) {
         return NextResponse.next({ request })
     }
 

@@ -17,6 +17,9 @@
  * Importante:
  * - NÃO queremos interceptar `/api/*` aqui, porque Route Handlers já tratam auth
  *   e um redirect 307 para /login quebra clientes (ex: fetch do chat).
+ * - NÃO queremos interceptar `/p/*` (landing pages publicadas), porque são páginas
+ *   públicas servidas a tráfego pago/anônimo. Rodar Supabase getUser() + RPC em
+ *   cada hit só por instinto adiciona latência e ainda redireciona pra /login.
  */
 
 import { type NextRequest } from 'next/server'
@@ -37,11 +40,12 @@ export const config = {
         /*
          * Match all request paths exceto:
          * - api (Route Handlers)
+         * - p/* (landing pages publicadas — públicas, servidas a tráfego pago)
          * - _next/static, _next/image
          * - _next/data (mesmo excluindo, o Next pode ainda invocar o Proxy para /_next/data por segurança)
          * - arquivos de metadata (manifest, sitemap, robots)
          * - assets (imagens)
          */
-        '/((?!api|_next/static|_next/image|_next/data|favicon.ico|sitemap.xml|robots.txt|manifest.webmanifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+        '/((?!api|p/|_next/static|_next/image|_next/data|favicon.ico|sitemap.xml|robots.txt|manifest.webmanifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
     ],
 }
