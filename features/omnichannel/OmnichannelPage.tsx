@@ -186,8 +186,13 @@ function ConversationQueue({
               }`}
             >
               <div className="flex items-start gap-3">
-                <div className="shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-pink-400 to-purple-500 flex items-center justify-center text-white text-sm font-bold">
-                  {name.charAt(0).toUpperCase()}
+                <div className="relative shrink-0">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-pink-400 to-purple-500 flex items-center justify-center text-white text-sm font-bold">
+                    {name.charAt(0).toUpperCase()}
+                  </div>
+                  <span className="absolute -bottom-0.5 -right-0.5 bg-white dark:bg-slate-900 rounded-full p-0.5 shadow-sm">
+                    <ChannelIcon channel={conv.channel} size={14} />
+                  </span>
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
@@ -206,9 +211,7 @@ function ConversationQueue({
                   <div className="flex items-center gap-1.5 mt-1.5">
                     <StatusPill status={conv.status} />
                     {conv.ai_agent_owned && <AgentBadge />}
-                    <span className="text-[10px] text-slate-400 inline-flex items-center gap-0.5">
-                      <ChannelIcon channel={conv.channel} />
-                    </span>
+                    <ChannelIcon channel={conv.channel} size={14} />
                     {conv.unread_count > 0 && (
                       <span className="ml-auto bg-primary-500 text-white text-[10px] font-bold rounded-full px-1.5 min-w-[18px] text-center">
                         {conv.unread_count > 9 ? '9+' : conv.unread_count}
@@ -247,8 +250,13 @@ function ConversationHeader({ conversation, currentUserId, onAssign, onClose, on
   return (
     <div className="px-6 py-3 border-b border-slate-200 dark:border-white/10 flex items-center justify-between gap-4 bg-white dark:bg-dark-card">
       <div className="flex items-center gap-3 min-w-0">
-        <div className="shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-pink-400 to-purple-500 flex items-center justify-center text-white text-sm font-bold">
-          {name.charAt(0).toUpperCase()}
+        <div className="relative shrink-0">
+          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-pink-400 to-purple-500 flex items-center justify-center text-white text-sm font-bold">
+            {name.charAt(0).toUpperCase()}
+          </div>
+          <span className="absolute -bottom-0.5 -right-0.5 bg-white dark:bg-slate-900 rounded-full p-0.5 shadow-sm">
+            <ChannelIcon channel={conversation.channel} size={14} />
+          </span>
         </div>
         <div className="min-w-0">
           <p className="font-semibold text-slate-900 dark:text-white truncate">{name}</p>
@@ -256,7 +264,7 @@ function ConversationHeader({ conversation, currentUserId, onAssign, onClose, on
             <Phone size={11} />
             {phone}
             <span className="text-slate-300 dark:text-slate-600">•</span>
-            <ChannelIcon channel={conversation.channel} />
+            <ChannelIcon channel={conversation.channel} size={14} />
             {channelLabel}
           </p>
           {conversation.assigned_user_id && (

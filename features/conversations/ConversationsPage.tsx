@@ -6,6 +6,8 @@ import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/context/AuthContext'
 import { useRouter } from 'next/navigation'
+import type { ConversationChannel } from '@/types'
+import { ChannelIcon } from './components/ChannelBadge'
 
 type FilterType = 'open' | 'all' | 'unread'
 
@@ -13,6 +15,7 @@ interface Conversation {
   id: string
   wa_chat_id: string | null
   contact_id: string | null
+  channel: ConversationChannel
   status: string | null
   unread_count: number | null
   last_message_at: string | null
@@ -43,8 +46,13 @@ function ConversationListItem({
       onClick={onClick}
       className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors text-left border-b border-slate-100 dark:border-white/5 last:border-0"
     >
-      <div className="flex-shrink-0 w-10 h-10 bg-slate-200 dark:bg-white/10 rounded-full flex items-center justify-center text-sm font-bold text-slate-600 dark:text-slate-300">
-        {name.charAt(0).toUpperCase()}
+      <div className="relative shrink-0">
+        <div className="w-10 h-10 bg-slate-200 dark:bg-white/10 rounded-full flex items-center justify-center text-sm font-bold text-slate-600 dark:text-slate-300">
+          {name.charAt(0).toUpperCase()}
+        </div>
+        <span className="absolute -bottom-0.5 -right-0.5 bg-white dark:bg-slate-900 rounded-full p-0.5 shadow-sm">
+          <ChannelIcon channel={conversation.channel} size={14} />
+        </span>
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
@@ -82,7 +90,7 @@ export function ConversationsPage() {
       let query = supabase
         .from('conversations')
         .select(`
-          id, wa_chat_id, contact_id, status, unread_count, last_message_at, last_message_body,
+          id, wa_chat_id, contact_id, channel, status, unread_count, last_message_at, last_message_body,
           contacts (first_name, last_name, phone)
         `)
         .eq('organization_id', organizationId!)

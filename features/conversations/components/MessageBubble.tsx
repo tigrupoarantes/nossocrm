@@ -82,9 +82,7 @@ export function MessageBubble({ message, showChannelBadge = true }: MessageBubbl
             {formatTime(message.sentAt)}
           </span>
           {showChannelBadge && message.channel !== 'whatsapp' && (
-            <span className="text-[10px]">
-              <ChannelIcon channel={message.channel} />
-            </span>
+            <ChannelIcon channel={message.channel} size={12} />
           )}
           {isOutbound && <StatusIndicator status={message.status} />}
         </div>
