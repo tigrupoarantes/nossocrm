@@ -7,7 +7,7 @@ import type { ConversationChannel } from '@/types';
 // SVG icons — logos oficiais simplificadas
 // ---------------------------------------------------------------------------
 
-function WhatsAppSvg({ size = 16 }: { size?: number }) {
+const WhatsAppSvg = React.memo(function WhatsAppSvg({ size = 16 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path
@@ -16,9 +16,9 @@ function WhatsAppSvg({ size = 16 }: { size?: number }) {
       />
     </svg>
   );
-}
+});
 
-function InstagramSvg({ size = 16 }: { size?: number }) {
+const InstagramSvg = React.memo(function InstagramSvg({ size = 16 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
       <defs>
@@ -36,9 +36,9 @@ function InstagramSvg({ size = 16 }: { size?: number }) {
       <rect x="4" y="4" width="16" height="16" rx="4" stroke="white" strokeWidth="1.5" fill="none" />
     </svg>
   );
-}
+});
 
-function FacebookSvg({ size = 16 }: { size?: number }) {
+const FacebookSvg = React.memo(function FacebookSvg({ size = 16 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
       <defs>
@@ -57,16 +57,16 @@ function FacebookSvg({ size = 16 }: { size?: number }) {
       />
     </svg>
   );
-}
+});
 
-function EmailSvg({ size = 16 }: { size?: number }) {
+const EmailSvg = React.memo(function EmailSvg({ size = 16 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
       <rect x="2" y="4" width="20" height="16" rx="3" fill="#64748b" />
       <path d="M2 7l10 6 10-6" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
-}
+});
 
 // ---------------------------------------------------------------------------
 // Mapa de configuração por canal

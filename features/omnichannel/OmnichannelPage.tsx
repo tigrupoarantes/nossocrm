@@ -181,7 +181,7 @@ function ConversationQueue({
               key={conv.id}
               type="button"
               onClick={() => onSelect(conv.id)}
-              className={`w-full text-left px-4 py-3 border-b border-slate-100 dark:border-white/5 transition-colors hover:bg-slate-50 dark:hover:bg-white/5 ${
+              className={`w-full text-left px-4 py-3 border-b border-slate-100 dark:border-white/5 transition-colors hover:bg-slate-50 dark:hover:bg-white/5 cv-auto cv-row-lg ${
                 isSelected ? 'bg-primary-500/5 border-l-2 border-l-primary-500' : ''
               }`}
             >

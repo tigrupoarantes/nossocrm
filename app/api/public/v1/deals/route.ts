@@ -73,7 +73,7 @@ export async function GET(request: Request) {
   const from = offset;
   const to = offset + limit - 1;
   const { data, count, error } = await query.range(from, to);
-  if (error) return NextResponse.json({ error: error.message, code: 'DB_ERROR' }, { status: 500 });
+  if (error) return NextResponse.json({ error: 'Internal server error', code: 'DB_ERROR' }, { status: 500 });
 
   const total = count ?? 0;
   const nextOffset = to + 1;
@@ -214,7 +214,7 @@ export async function POST(request: Request) {
     .insert(insertPayload)
     .select('id,title,value,board_id,stage_id,contact_id,client_company_id,is_won,is_lost,loss_reason,closed_at,created_at,updated_at')
     .single();
-  if (error) return NextResponse.json({ error: error.message, code: 'DB_ERROR' }, { status: 500 });
+  if (error) return NextResponse.json({ error: 'Internal server error', code: 'DB_ERROR' }, { status: 500 });
 
   // Disparar automações de deal_created (fire-and-forget)
   if (data?.id && boardId) {

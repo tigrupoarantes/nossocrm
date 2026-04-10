@@ -23,7 +23,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ boardKeyOrI
     .match(isValidUUID(value) ? { id: value } : { key: value })
     .maybeSingle();
 
-  if (boardError) return NextResponse.json({ error: boardError.message, code: 'DB_ERROR' }, { status: 500 });
+  if (boardError) return NextResponse.json({ error: 'Internal server error', code: 'DB_ERROR' }, { status: 500 });
   if (!board?.id) return NextResponse.json({ error: 'Board not found', code: 'NOT_FOUND' }, { status: 404 });
 
   const { data, error } = await sb
@@ -33,7 +33,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ boardKeyOrI
     .eq('board_id', board.id)
     .order('order', { ascending: true });
 
-  if (error) return NextResponse.json({ error: error.message, code: 'DB_ERROR' }, { status: 500 });
+  if (error) return NextResponse.json({ error: 'Internal server error', code: 'DB_ERROR' }, { status: 500 });
 
   return NextResponse.json({
     data: (data || []).map((s: any) => ({

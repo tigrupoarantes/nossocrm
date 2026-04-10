@@ -44,7 +44,7 @@ function ConversationListItem({
     <button
       type="button"
       onClick={onClick}
-      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors text-left border-b border-slate-100 dark:border-white/5 last:border-0"
+      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors text-left border-b border-slate-100 dark:border-white/5 last:border-0 cv-auto cv-row-lg"
     >
       <div className="relative shrink-0">
         <div className="w-10 h-10 bg-slate-200 dark:bg-white/10 rounded-full flex items-center justify-center text-sm font-bold text-slate-600 dark:text-slate-300">

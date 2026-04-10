@@ -21,7 +21,8 @@ function Avatar({ name, url, size = 8 }: { name: string; url: string | null; siz
   const color = colors[name.charCodeAt(0) % colors.length]
 
   if (url) {
-    return <img src={url} alt={name} className={`w-${size} h-${size} rounded-full object-cover`} />
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={url} alt={name} loading="lazy" decoding="async" className={`w-${size} h-${size} rounded-full object-cover`} />
   }
 
   return (

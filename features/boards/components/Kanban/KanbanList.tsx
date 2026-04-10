@@ -97,7 +97,7 @@ const KanbanListRow = React.memo(function KanbanListRow({
         </td>
         <td className="px-6 py-3">
           <div className="flex items-center gap-2">
-            <Image src={deal.owner.avatar} alt="" width={20} height={20} className="w-5 h-5 rounded-full" unoptimized />
+            <Image src={deal.owner.avatar} alt={deal.owner.name} width={20} height={20} className="w-5 h-5 rounded-full" />
             <span className="text-xs text-slate-500">{deal.owner.name}</span>
           </div>
         </td>

@@ -382,6 +382,80 @@ ANTI-PATTERNS — NUNCA FAZER
 ❌ Spacing fora da escala 8px (py-13, mt-7)
 
 ═══════════════════════════════════════════════════════════════
+CONTEXTO DE MARKETING — COPY E CONVERSÃO INTELIGENTE
+═══════════════════════════════════════════════════════════════
+
+Use este conhecimento para escrever copy mais profissional e orientada a conversão:
+
+PÚBLICO TÍPICO: compradores B2B — donos de PDV (padarias, mercados, restaurantes, lojas de conveniência, supermercados, redes de varejo). São práticos, com pouco tempo, decidem por preço, relacionamento e conveniência. WhatsApp é o canal principal deles.
+
+PSICOLOGIA DE CONVERSÃO PARA B2B:
+- Lead magnet: diagnóstico grátis, tabela de preços, catálogo de produtos, calculadora de ROI
+- Trust signals: anos de mercado, número de clientes ativos, logos de indústrias, regiões de entrega
+- Urgência: campanhas sazonais, estoque limitado, preço de lançamento
+- CTA de baixo compromisso primeiro: "Receber catálogo grátis" antes de "Fazer pedido"
+
+ADAPTAÇÃO POR CANAL (leia o prompt do usuário para detectar):
+- Se menciona Facebook Ads / Instagram: visual-heavy, escaneável, CTA forte above-fold, proof social em destaque
+- Se menciona WhatsApp: tom conversacional, mais curto, campo de telefone primeiro no form
+- Se menciona orgânico / SEO: conteúdo mais longo, FAQ robusto, mais seções de conteúdo
+
+REGRAS DE COPY PARA B2B:
+- Headline DEVE mencionar resultado concreto ("30% mais pedidos", "entrega em 24h", "sem pedido mínimo")
+- NUNCA jargão corporativo ("sinergia", "solução integrada", "ecossistema", "paradigma")
+- Use a linguagem do cliente: "pedido", "entrega", "preço", "catálogo", "representante", "promoção"
+- Números > adjetivos: "+1.200 clientes ativos" vence "muitas empresas confiam"
+- Prova social com métrica de resultado: "Aumentou pedidos em 38% em 90 dias" (não apenas "Excelente serviço")
+
+HEADLINES B2B QUE CONVERTEM (exemplos para se inspirar):
+- "Receba seu primeiro pedido em até 48 horas"
+- "Distribuidora com +1.200 clientes ativos na região de Ribeirão Preto"
+- "Catálogo com mais de 3.000 SKUs de 20 indústrias líderes"
+- "Seu representante comercial, agora no WhatsApp"
+
+═══════════════════════════════════════════════════════════════
+EFEITOS VISUAIS AVANÇADOS — USE 2-3 POR PÁGINA
+═══════════════════════════════════════════════════════════════
+
+Escolha 2-3 destes efeitos para elevar o nível visual. Não use todos — menos é mais.
+
+AURORA HERO (fundo com blobs animados — premium feel):
+Adicionar dentro do hero, posição absoluta, z-index:-1:
+  .aurora-blob{position:absolute;width:600px;height:600px;border-radius:50%;filter:blur(80px);opacity:0.15;animation:aurora 12s ease-in-out infinite alternate}
+  .aurora-blob:nth-child(1){background:var(--color-primary-400);top:-20%;left:-10%}
+  .aurora-blob:nth-child(2){background:oklch(70% 0.2 310);top:-10%;right:-15%;animation-delay:-4s;animation-duration:15s}
+  @keyframes aurora{0%{transform:translate(0,0) scale(1)}100%{transform:translate(60px,-40px) scale(1.1)}}
+  @media(prefers-reduced-motion:reduce){.aurora-blob{animation:none}}
+  Em dark mode: reduzir opacity para 0.10.
+
+GRADIENT TEXT (hero headline com gradiente):
+  .gradient-text{background:linear-gradient(135deg,var(--color-primary-500),oklch(65% 0.25 310));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+
+GLASS CARD (para depoimento ou pricing — 1 por página no máximo):
+  .glass-card{background:oklch(98% 0 0/0.6);backdrop-filter:blur(16px) saturate(1.8);border:1px solid oklch(90% 0 0/0.3);border-radius:16px;box-shadow:0 8px 32px oklch(0% 0 0/0.08),inset 0 1px 0 oklch(100% 0 0/0.4)}
+
+GLOW BUTTON (CTA primário que brilha no hover):
+  .btn-glow{position:relative}
+  .btn-glow::before{content:'';position:absolute;inset:-2px;border-radius:inherit;background:linear-gradient(135deg,var(--color-primary-400),oklch(70% 0.2 310));opacity:0;transition:opacity 0.4s;z-index:-1;filter:blur(12px)}
+  .btn-glow:hover::before{opacity:0.6}
+
+GRID BACKGROUND (fundo sutil estilo Linear — OU aurora, nunca ambos):
+  .grid-bg{background-image:linear-gradient(var(--color-border-subtle) 1px,transparent 1px),linear-gradient(90deg,var(--color-border-subtle) 1px,transparent 1px);background-size:60px 60px;position:absolute;inset:0;z-index:-1;mask-image:radial-gradient(ellipse 60% 60% at 50% 50%,black 20%,transparent 70%)}
+
+GRADIENT BORDER (cards premium):
+  .gradient-border{position:relative}
+  .gradient-border::before{content:'';position:absolute;inset:0;border-radius:inherit;padding:1.5px;background:linear-gradient(135deg,var(--color-primary-400),oklch(70% 0.2 310));-webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);-webkit-mask-composite:xor;mask-composite:exclude}
+
+REGRAS DE SELEÇÃO:
+- Aurora OU grid-bg no hero (nunca ambos juntos)
+- Gradient text na headline do hero (não em outros lugares)
+- Glass card para no máximo 1 seção (depoimento OU pricing)
+- Glow button apenas no CTA primário (não no secundário)
+- Card-lift OU gradient-border nos cards de features (não ambos)
+- TODAS as animações devem ter @media(prefers-reduced-motion:reduce) fallback
+- Em dark mode: reduzir opacidades de blobs e gradientes (menos vibrante)
+
+═══════════════════════════════════════════════════════════════
 FORMULÁRIO DE CAPTURA — JAVASCRIPT INTOCÁVEL
 ═══════════════════════════════════════════════════════════════
 
@@ -572,6 +646,15 @@ ESTRUTURA (6-8 seções, na ordem):
 8. CTA FINAL + FORM + FOOTER minimalista
 
 CTAs: NUNCA "Saiba mais"/"Cadastre-se". Use verbo + ganho: "Começar grátis agora", "Quero meu diagnóstico".
+
+MARKETING & COPY: público B2B (donos de PDV — padarias, mercados, restaurantes). Headline com resultado concreto ("30% mais pedidos"), sem jargão corporativo. Números > adjetivos. Se o prompt menciona Facebook Ads: visual-heavy, CTA forte above-fold. Se WhatsApp: tom conversacional, telefone primeiro no form.
+
+EFEITOS VISUAIS (use 1-2 para elevar o nível):
+- Aurora hero: 2 divs absolutos com blur(80px), opacity:0.15, animation:aurora 12s infinite alternate
+  @keyframes aurora{0%{transform:translate(0,0)}100%{transform:translate(60px,-40px) scale(1.1)}}
+- Gradient text no headline: background:linear-gradient(135deg,var(--color-primary-500),oklch(65% 0.25 310));-webkit-background-clip:text;-webkit-text-fill-color:transparent
+- Glow no CTA: .btn-glow::before com blur(12px), opacity:0 → 0.6 no hover
+- Todos com @media(prefers-reduced-motion:reduce) fallback
 
 SCRIPT DE MOTION (incluir antes de </body>):
 <script>

@@ -332,7 +332,7 @@ export const ProfilePage: React.FC = () => {
                                     width={80}
                                     height={80}
                                     className="w-20 h-20 rounded-2xl object-cover shadow-xl"
-                                    unoptimized
+                                    priority
                                 />
                             ) : (
                                 <div className={`w-20 h-20 rounded-2xl bg-linear-to-br ${gradient} flex items-center justify-center text-white font-bold text-2xl shadow-xl`}>

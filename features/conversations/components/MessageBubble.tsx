@@ -67,6 +67,8 @@ export function MessageBubble({ message, showChannelBadge = true }: MessageBubbl
           <img
             src={message.mediaUrl}
             alt="Imagem"
+            loading="lazy"
+            decoding="async"
             className="mb-2 rounded-lg max-w-full max-h-48 object-cover"
           />
         )}

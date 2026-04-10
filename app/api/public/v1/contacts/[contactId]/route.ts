@@ -61,7 +61,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ contactId: 
     .eq('id', contactId)
     .maybeSingle();
 
-  if (error) return NextResponse.json({ error: error.message, code: 'DB_ERROR' }, { status: 500 });
+  if (error) return NextResponse.json({ error: 'Internal server error', code: 'DB_ERROR' }, { status: 500 });
   if (!data) return NextResponse.json({ error: 'Contact not found', code: 'NOT_FOUND' }, { status: 404 });
 
   return NextResponse.json({ data });
@@ -128,7 +128,7 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ contactId
     .select('id,name,email,phone,role,company_name,client_company_id,avatar,notes,status,stage,source,birth_date,last_interaction,last_purchase_date,total_value,created_at,updated_at')
     .maybeSingle();
 
-  if (error) return NextResponse.json({ error: error.message, code: 'DB_ERROR' }, { status: 500 });
+  if (error) return NextResponse.json({ error: 'Internal server error', code: 'DB_ERROR' }, { status: 500 });
   if (!data) return NextResponse.json({ error: 'Contact not found', code: 'NOT_FOUND' }, { status: 404 });
 
   return NextResponse.json({ data });

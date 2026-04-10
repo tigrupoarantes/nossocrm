@@ -393,7 +393,6 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                   width={40}
                   height={40}
                   className="w-10 h-10 rounded-full object-cover ring-2 ring-white dark:ring-slate-800 shadow-lg"
-                  unoptimized
                 />
               ) : (
                 <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center text-white font-bold text-sm ring-2 ring-white dark:ring-slate-800 shadow-lg shrink-0" aria-hidden="true">

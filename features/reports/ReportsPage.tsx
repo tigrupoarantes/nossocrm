@@ -388,7 +388,6 @@ const ReportsPage: React.FC = () => {
                     width={32}
                     height={32}
                     className="w-8 h-8 rounded-full"
-                    unoptimized
                   />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{rep.name}</p>

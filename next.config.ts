@@ -27,6 +27,14 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: process.cwd(),
   },
+  images: {
+    remotePatterns: [
+      { protocol: 'https', hostname: 'zczenktzrdqxakfawnfp.supabase.co' },
+      { protocol: 'https', hostname: 'zczenktzrdqxakfawnfp.supabaseusercontent.com' },
+      { protocol: 'https', hostname: 'images.unsplash.com' },
+      { protocol: 'https', hostname: 'api.dicebear.com' },
+    ],
+  },
   async headers() {
     return [
       {
@@ -49,6 +57,21 @@ const nextConfig: NextConfig = {
           {
             key: "Strict-Transport-Security",
             value: "max-age=31536000; includeSubDomains",
+          },
+          {
+            key: "Content-Security-Policy",
+            value: [
+              "default-src 'self'",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com",
+              "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+              "font-src 'self' https://fonts.gstatic.com",
+              "img-src 'self' data: https://zczenktzrdqxakfawnfp.supabase.co https://zczenktzrdqxakfawnfp.supabaseusercontent.com https://images.unsplash.com https://api.dicebear.com",
+              "connect-src 'self' https://zczenktzrdqxakfawnfp.supabase.co wss://zczenktzrdqxakfawnfp.supabase.co https://graph.facebook.com https://www.facebook.com",
+              "frame-src 'self'",
+              "frame-ancestors 'none'",
+              "object-src 'none'",
+              "base-uri 'self'",
+            ].join("; "),
           },
         ],
       },
