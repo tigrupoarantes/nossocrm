@@ -186,5 +186,8 @@ export async function POST(
   return json({
     ok: true,
     redirectUrl: lp.thank_you_redirect_url ?? null,
+    leadCreated: !!contactId,
+    dealCreated: !!dealId,
+    boardConfigured: !!lp.target_board_id,
   });
 }

@@ -619,6 +619,11 @@ export function LandingPageBuilder({ landingPageId }: LandingPageBuilderProps) {
                   ✓ Leads → {selectedBoard.name} › {availableStages.find(s => s.id === targetStageId)?.label}
                 </p>
               )}
+              {!targetBoardId && (
+                <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">
+                  ⚠ Sem funil selecionado — leads ficarão apenas nas submissões, sem card no board.
+                </p>
+              )}
             </div>
 
             {/* Input de prompt */}
