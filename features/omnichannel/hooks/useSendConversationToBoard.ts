@@ -66,8 +66,8 @@ export function useSendConversationToBoard() {
           status: 'ACTIVE',
           stage: ContactStage.LEAD,
           totalValue: 0,
-          source: `Omnichannel - ${conversation.channel}`,
-        } as Omit<Contact, 'id' | 'createdAt'>;
+          source: 'MANUAL',
+        };
         const created = await createContact.mutateAsync(payload);
         contactId = created.id;
         contactName = created.name;
