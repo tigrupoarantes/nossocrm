@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import { MessageSquare, Search, Phone, Bot, UserCheck, X, RotateCcw, Lock } from 'lucide-react';
+import { MessageSquare, Search, Phone, Bot, UserCheck, X, RotateCcw, Lock, ArrowRightCircle } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { useToast } from '@/context/ToastContext';
 import { useRealtimeSync } from '@/lib/realtime/useRealtimeSync';
 import {
   useConversations,
@@ -15,8 +16,12 @@ import {
   type ConversationStatus,
   type ConversationWithContact,
 } from '@/lib/query/hooks/useConversationsQuery';
+import { useBoards } from '@/lib/query/hooks/useBoardsQuery';
 import { ConversationThread } from '@/features/conversations/components/ConversationThread';
 import { ChannelIcon } from '@/features/conversations/components/ChannelBadge';
+import { SendToBoardModal } from './components/SendToBoardModal';
+import { useSendConversationToBoard } from './hooks/useSendConversationToBoard';
+import type { Board } from '@/types';
 
 // =============================================================================
 // Helpers
@@ -238,10 +243,13 @@ interface ThreadPaneProps {
   onAssign: () => void;
   onClose: () => void;
   onReopen: () => void;
+  onSendToBoard: () => void;
+  canSendToBoard: boolean;
   isMutating: boolean;
+  isSendingToBoard: boolean;
 }
 
-function ConversationHeader({ conversation, currentUserId, onAssign, onClose, onReopen, isMutating }: ThreadPaneProps) {
+function ConversationHeader({ conversation, currentUserId, onAssign, onClose, onReopen, onSendToBoard, canSendToBoard, isMutating, isSendingToBoard }: ThreadPaneProps) {
   if (!conversation) return null;
   const { name, phone } = contactDisplay(conversation);
   const isMine = conversation.assigned_user_id === currentUserId;
@@ -287,6 +295,19 @@ function ConversationHeader({ conversation, currentUserId, onAssign, onClose, on
       <div className="flex items-center gap-2 shrink-0">
         {conversation.ai_agent_owned && <AgentBadge />}
         <StatusPill status={conversation.status} />
+
+        {conversation.status !== 'encerrado' && (
+          <button
+            type="button"
+            onClick={onSendToBoard}
+            disabled={!canSendToBoard || isSendingToBoard}
+            title={canSendToBoard ? 'Enviar contato para um funil' : 'Nenhum funil disponível'}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 rounded-lg hover:bg-emerald-500/20 transition-colors disabled:opacity-50"
+          >
+            <ArrowRightCircle size={13} />
+            {isSendingToBoard ? 'Enviando...' : 'Enviar para funil'}
+          </button>
+        )}
 
         {conversation.status !== 'encerrado' && !isMine && (
           <button
@@ -418,6 +439,7 @@ function EmptyConversationState() {
 
 export function OmnichannelPage() {
   const { user } = useAuth();
+  const { addToast } = useToast();
   const currentUserId = user?.id;
 
   // Realtime: assina mudanças em messages e conversations da org. Quando
@@ -440,6 +462,9 @@ export function OmnichannelPage() {
   const assign = useAssignConversation();
   const closeConv = useCloseConversation();
   const reopen = useReopenConversation();
+  const { data: boards = [] } = useBoards();
+  const sendToBoard = useSendConversationToBoard();
+  const [boardPickerOpen, setBoardPickerOpen] = useState(false);
 
   // Counts por tab
   const counts = useMemo(() => {
@@ -491,6 +516,25 @@ export function OmnichannelPage() {
 
   const isMutating = assign.isPending || closeConv.isPending || reopen.isPending;
 
+  const handleSendToBoardClick = () => {
+    if (!selectedConversation) return;
+    if (boards.length === 0) {
+      addToast('Nenhum funil disponível. Crie um board primeiro.', 'error');
+      return;
+    }
+    if (boards.length === 1) {
+      void sendToBoard.send({ conversation: selectedConversation, board: boards[0] });
+      return;
+    }
+    setBoardPickerOpen(true);
+  };
+
+  const handleBoardPicked = async (board: Board) => {
+    if (!selectedConversation) return;
+    const result = await sendToBoard.send({ conversation: selectedConversation, board });
+    if (result.ok) setBoardPickerOpen(false);
+  };
+
   return (
     <div className="flex h-[calc(100vh-8rem)] -m-6 rounded-none border-t border-slate-200 dark:border-white/10 overflow-hidden">
       <ConversationQueue
@@ -516,7 +560,10 @@ export function OmnichannelPage() {
               onAssign={() => assign.mutate(selectedConversation.id)}
               onClose={() => closeConv.mutate(selectedConversation.id)}
               onReopen={() => reopen.mutate(selectedConversation.id)}
+              onSendToBoard={handleSendToBoardClick}
+              canSendToBoard={boards.length > 0}
               isMutating={isMutating}
+              isSendingToBoard={sendToBoard.isPending}
             />
             <ConversationThread messages={messages} loading={messagesLoading} />
             <ConversationComposer
@@ -530,6 +577,14 @@ export function OmnichannelPage() {
           </>
         )}
       </div>
+
+      <SendToBoardModal
+        isOpen={boardPickerOpen}
+        onClose={() => setBoardPickerOpen(false)}
+        boards={boards}
+        onConfirm={handleBoardPicked}
+        isPending={sendToBoard.isPending}
+      />
     </div>
   );
 }
