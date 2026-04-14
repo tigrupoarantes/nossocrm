@@ -6,6 +6,7 @@
 
 import { NextResponse } from 'next/server';
 import { createStaticAdminClient } from '@/lib/supabase/server';
+import { postProcessHtml } from '@/features/landing-pages/lib/html-postprocess';
 
 export async function GET(
   _req: Request,
@@ -32,7 +33,29 @@ export async function GET(
     .eq('id', lp.id)
     .then(() => {});
 
-  return new NextResponse(lp.html_content, {
-    headers: { 'Content-Type': 'text/html; charset=utf-8' },
+  // Garante tokens/Tailwind/fonts/motion injetados — idempotente, serve também
+  // pra LPs antigas geradas antes do post-processador.
+  const html = postProcessHtml(lp.html_content ?? '');
+
+  // CSP relaxada apenas para landing pages públicas: a IA gera imagens de
+  // CDNs variados (picsum, unsplash, placeholder, etc.) e a CSP global
+  // bloqueia tudo, poluindo o console. Mantém script/style controlados.
+  const lpCsp = [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com data:",
+    "img-src * data: blob:",
+    "connect-src 'self'",
+    "frame-src 'self'",
+    "object-src 'none'",
+    "base-uri 'self'",
+  ].join('; ');
+
+  return new NextResponse(html, {
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Content-Security-Policy': lpCsp,
+    },
   });
 }
