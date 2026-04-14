@@ -51,7 +51,7 @@ REGRAS TÉCNICAS OBRIGATÓRIAS
 2. Tailwind CSS via CDN: <script src="https://cdn.tailwindcss.com"></script>
 3. Google Fonts via <link> no <head>: Inter (400,500,600,700) + Space Grotesk (500,600,700) + Cinzel (600,700)
 4. Mobile-first REAL: desenhe primeiro a 375px (iPhone SE), depois adapte 1440px+
-5. Imagens: use URLs fornecidas pelo usuário OU Unsplash (https://images.unsplash.com/...). Hero sem loading lazy, restantes COM loading="lazy"
+5. Imagens: PROIBIDO usar <img src="https://..."> de CDNs externos (Unsplash, Picsum, placeholders, qualquer host que não seja o próprio). Em vez disso, use: (a) CSS backgrounds com linear-gradient/radial-gradient via variáveis --color-primary-*, (b) SVG inline para ícones e ilustrações, (c) padrões geométricos em CSS (pontos, grid, aurora blobs). Para visuais de hero, use <div> com gradiente + SVG inline por cima — nunca <img>. Placeholder de foto que o usuário vai trocar: <div data-lp-image-slot="hero" style="aspect-ratio:16/9;border-radius:16px;background:linear-gradient(135deg,var(--color-primary-500),var(--color-primary-700));display:flex;align-items:center;justify-content:center;color:white;font-weight:600;">Clique para subir imagem</div>. O editor visual detecta data-lp-image-slot e permite upload.
 6. Formulário de captura pré-configurado (ver FORMULÁRIO abaixo) — NÃO alterar o JavaScript
 7. Retornar APENAS o HTML, sem markdown, sem explicações, sem code fences
 8. Suporte a dark mode via classe .dark no <html> (toggle opcional, mas estrutura precisa funcionar)
@@ -549,7 +549,7 @@ REGRAS TÉCNICAS:
 1. HTML auto-contido, Tailwind CSS via CDN: <script src="https://cdn.tailwindcss.com"></script>
 2. Google Fonts: Inter (400-700) + Space Grotesk (500-700)
 3. Mobile-first, responsivo (375px → 1440px). Tap targets ≥ 48px
-4. Imagens: URLs do usuário OU Unsplash. Hero sem lazy, restantes com loading="lazy"
+4. Imagens: PROIBIDO <img src="https://..."> de CDNs (Unsplash, Picsum). Use CSS gradients (linear/radial com var(--color-primary-*)), SVG inline para ícones/ilustrações, e <div data-lp-image-slot="nome" style="aspect-ratio:16/9;border-radius:16px;background:linear-gradient(135deg,var(--color-primary-500),var(--color-primary-700));"></div> como placeholder de foto — usuário troca no editor.
 5. Retornar APENAS HTML, sem markdown, sem code fences
 6. Respeitar prefers-reduced-motion
 

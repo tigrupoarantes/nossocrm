@@ -2,7 +2,7 @@
 // Minimal Service Worker (MVP): cache app shell assets for faster launch.
 // Note: This does NOT provide offline data sync.
 
-const CACHE_NAME = 'nossocrm-shell-v4';
+const CACHE_NAME = 'nossocrm-shell-v5';
 const SHELL_URLS = [
   '/',
   '/login',
@@ -31,6 +31,12 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
+
+  // Bypass: requests cross-origin (unsplash, fonts, cdn.tailwindcss, etc.) são
+  // deixadas para o browser. Interceptar e tentar cachear opaque responses
+  // causa cancelamento silencioso e looping de load.
+  const reqUrl = new URL(req.url);
+  if (reqUrl.origin !== self.location.origin) return;
 
   // Network-first for navigations, fallback to cache if offline.
   if (req.mode === 'navigate') {
