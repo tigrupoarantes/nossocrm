@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Globe, Copy, Check, Loader2, ExternalLink, AlertCircle } from 'lucide-react';
-import { usePublishLandingPage, useUpdateLandingPage } from '../hooks/useLandingPages';
+import { Globe, Copy, Check, Loader2, ExternalLink, AlertCircle, Eye } from 'lucide-react';
+import { usePublishLandingPage, useUpdateLandingPage, useLandingPage } from '../hooks/useLandingPages';
+import { LivePreview } from './LivePreview';
 
 interface PublishDialogProps {
   landingPageId: string;
@@ -16,9 +17,12 @@ const SLUG_REGEX = /^[a-z0-9-]+$/;
 export function PublishDialog({ landingPageId, slug, status, onClose }: PublishDialogProps) {
   const publishMutation = usePublishLandingPage(landingPageId);
   const updateMutation = useUpdateLandingPage();
+  const { data: lp } = useLandingPage(landingPageId);
   const [copied, setCopied] = useState(false);
   const [slugInput, setSlugInput] = useState(slug);
   const [slugError, setSlugError] = useState<string | null>(null);
+  const [showFullPreview, setShowFullPreview] = useState(false);
+  const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>('desktop');
 
   const lpBaseUrl = process.env.NEXT_PUBLIC_LP_BASE_URL ?? '/p';
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
@@ -138,6 +142,17 @@ export function PublishDialog({ landingPageId, slug, status, onClose }: PublishD
           )}
         </div>
 
+        {/* Botão de preview fullscreen */}
+        {lp?.htmlContent && (
+          <button
+            onClick={() => setShowFullPreview(true)}
+            className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors"
+          >
+            <Eye size={14} />
+            Visualizar em tela cheia antes de publicar
+          </button>
+        )}
+
         {/* Botões */}
         <div className="flex items-center gap-3 pt-1">
           <button
@@ -165,6 +180,17 @@ export function PublishDialog({ landingPageId, slug, status, onClose }: PublishD
           <p className="text-xs text-red-500 text-center">{publishMutation.error.message}</p>
         )}
       </div>
+
+      {/* Fullscreen preview (read-only) */}
+      {showFullPreview && lp?.htmlContent && (
+        <LivePreview
+          html={lp.htmlContent}
+          mode={previewMode}
+          onModeChange={setPreviewMode}
+          initialFullscreen
+          onFullscreenClose={() => setShowFullPreview(false)}
+        />
+      )}
     </div>
   );
 }

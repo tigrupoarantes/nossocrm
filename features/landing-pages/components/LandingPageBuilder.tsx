@@ -16,6 +16,7 @@ import { PublishDialog } from './PublishDialog';
 import { SubmissionsList } from './SubmissionsList';
 import { useBoards } from '@/lib/query/hooks/useBoardsQuery';
 import { useAuth } from '@/context/AuthContext';
+import { useOrganizationName } from '@/lib/query/hooks/useOrganizationName';
 import type { LandingPage } from '@/types';
 
 // ---------------------------------------------------------------------------
@@ -65,6 +66,7 @@ export function LandingPageBuilder({ landingPageId }: LandingPageBuilderProps) {
   const generateMutation = useGeneratePage();
   const { data: boards } = useBoards();
   const { organizationId } = useAuth();
+  const { data: orgName } = useOrganizationName();
 
   // Core state
   const [title, setTitle] = useState('');
@@ -308,7 +310,7 @@ export function LandingPageBuilder({ landingPageId }: LandingPageBuilderProps) {
     try {
       const result = await generateMutation.mutateAsync({
         prompt: text,
-        orgName: lpTitle,
+        orgName: orgName || lpTitle,
         webhookUrl: resolvedWebhook,
         apiKey: resolvedApiKey,
         currentHtml: isRefinement ? htmlContent : undefined,

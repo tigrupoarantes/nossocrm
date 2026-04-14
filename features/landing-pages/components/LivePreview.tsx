@@ -1,7 +1,8 @@
 'use client';
 
 import { useRef, useEffect, useState, useCallback } from 'react';
-import { Monitor, Smartphone, Pencil, Eye } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { Monitor, Smartphone, Pencil, Eye, Maximize2, X } from 'lucide-react';
 
 interface LivePreviewProps {
   html: string;
@@ -11,6 +12,10 @@ interface LivePreviewProps {
   onHtmlEdit?: (html: string) => void;
   /** Chamado quando o iframe solicita upload de imagem (editor visual) */
   onRequestImageUpload?: () => Promise<string | null>;
+  /** Inicia em fullscreen (para uso no PublishDialog) */
+  initialFullscreen?: boolean;
+  /** Callback quando fullscreen fecha (para uso externo) */
+  onFullscreenClose?: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -131,10 +136,16 @@ function injectHeightReporter(html: string): string {
 
 export function LivePreview({
   html, mode, onModeChange, isGenerating = false, onHtmlEdit, onRequestImageUpload,
+  initialFullscreen = false, onFullscreenClose,
 }: LivePreviewProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [isEditMode, setIsEditMode] = useState(false);
   const [iframeHeight, setIframeHeight] = useState(700);
+  const [isFullscreen, setIsFullscreen] = useState(initialFullscreen);
+  const [mounted, setMounted] = useState(false);
+
+  // Necessário para createPortal funcionar no SSR
+  useEffect(() => { setMounted(true); }, []);
 
   // Atualiza o srcdoc quando o html mudar (fora do modo edição)
   useEffect(() => {
@@ -156,6 +167,19 @@ export function LivePreview({
         : EMPTY_PREVIEW;
     }
   }, [isEditMode]); // html is intentionally omitted — only toggle triggers reload
+
+  // Escape para sair do fullscreen
+  useEffect(() => {
+    if (!isFullscreen) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsFullscreen(false);
+        onFullscreenClose?.();
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [isFullscreen, onFullscreenClose]);
 
   // Escuta mensagens do iframe
   const handleMessage = useCallback(async (e: MessageEvent) => {
@@ -190,78 +214,148 @@ export function LivePreview({
 
   const canEdit = !!html && !!onHtmlEdit;
 
+  function handleCloseFullscreen() {
+    setIsFullscreen(false);
+    onFullscreenClose?.();
+  }
+
+  // -------------------------------------------------------------------------
+  // Toolbar (reutilizado em modo normal e fullscreen)
+  // -------------------------------------------------------------------------
+  const toolbar = (
+    <div className={`flex items-center justify-between px-4 py-2 border-b border-slate-200 dark:border-white/10 shrink-0 ${
+      isFullscreen ? 'bg-white/90 dark:bg-slate-900/90 backdrop-blur-md' : 'bg-slate-50 dark:bg-white/5'
+    }`}>
+      <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+        {isEditMode ? 'Editando' : isFullscreen ? 'Preview em tela cheia' : 'Preview'}
+      </span>
+      <div className="flex items-center gap-1">
+        {/* Toggle desktop/mobile */}
+        <button
+          onClick={() => onModeChange('desktop')}
+          className={`p-1.5 rounded-lg transition-colors ${mode === 'desktop'
+            ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400'
+            : 'text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5'
+            }`}
+          title="Desktop"
+        >
+          <Monitor size={16} />
+        </button>
+        <button
+          onClick={() => onModeChange('mobile')}
+          className={`p-1.5 rounded-lg transition-colors ${mode === 'mobile'
+            ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400'
+            : 'text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5'
+            }`}
+          title="Mobile"
+        >
+          <Smartphone size={16} />
+        </button>
+
+        <div className="w-px h-4 bg-slate-200 dark:bg-white/10 mx-0.5" />
+
+        {/* Botão editor visual / preview */}
+        {canEdit && (
+          <button
+            onClick={() => setIsEditMode(v => !v)}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${isEditMode
+              ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400'
+              : 'text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5'
+              }`}
+            title={isEditMode ? 'Ver preview' : 'Editar visualmente'}
+          >
+            {isEditMode ? <><Eye size={14} /> Visualizar</> : <><Pencil size={14} /> Editar</>}
+          </button>
+        )}
+
+        <div className="w-px h-4 bg-slate-200 dark:bg-white/10 mx-0.5" />
+
+        {/* Fullscreen toggle */}
+        {isFullscreen ? (
+          <button
+            onClick={handleCloseFullscreen}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
+            title="Fechar tela cheia (Esc)"
+          >
+            <X size={14} /> Fechar
+          </button>
+        ) : (
+          <button
+            onClick={() => setIsFullscreen(true)}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
+            title="Tela cheia"
+            disabled={!html}
+          >
+            <Maximize2 size={16} />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+
+  // -------------------------------------------------------------------------
+  // Preview area (reutilizado em modo normal e fullscreen)
+  // -------------------------------------------------------------------------
+  const iframeArea = (
+    <div className={`flex-1 overflow-auto flex items-start justify-center ${
+      isFullscreen ? 'bg-slate-50 dark:bg-slate-950' : 'bg-slate-100 dark:bg-slate-900 p-4'
+    }`}>
+      <div
+        className={`relative bg-white shadow-xl overflow-hidden transition-all duration-300 ${
+          isFullscreen
+            ? mode === 'mobile'
+              ? 'w-[390px] rounded-lg my-4'
+              : 'w-full'
+            : mode === 'mobile'
+              ? 'w-[390px] rounded-lg'
+              : 'w-full max-w-5xl rounded-lg'
+        }`}
+      >
+        <iframe
+          ref={iframeRef}
+          className="w-full"
+          style={{
+            height: isFullscreen && mode === 'desktop' ? '100vh' : iframeHeight,
+            border: 'none',
+            transition: 'height .3s',
+          }}
+          sandbox="allow-scripts allow-forms allow-same-origin"
+          title="Preview da Landing Page"
+        />
+        {isGenerating && (
+          <div className="absolute inset-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm flex flex-col items-center justify-center gap-3">
+            <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+            <p className="text-sm font-medium text-slate-600 dark:text-slate-300">Gerando com IA...</p>
+            <p className="text-xs text-slate-400">Pode levar até 2 minutos</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  // -------------------------------------------------------------------------
+  // Fullscreen mode via portal
+  // -------------------------------------------------------------------------
+  if (isFullscreen && mounted) {
+    return createPortal(
+      <div
+        className="fixed inset-0 z-[9999] flex flex-col bg-white dark:bg-slate-950"
+        style={{ isolation: 'isolate' }}
+      >
+        {toolbar}
+        {iframeArea}
+      </div>,
+      document.body,
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Normal (inline) mode
+  // -------------------------------------------------------------------------
   return (
     <div className="flex flex-col h-full">
-      {/* Toolbar */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 shrink-0">
-        <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-          {isEditMode ? 'Editando' : 'Preview'}
-        </span>
-        <div className="flex items-center gap-1">
-          {/* Toggle desktop/mobile */}
-          {!isEditMode && (
-            <>
-              <button
-                onClick={() => onModeChange('desktop')}
-                className={`p-1.5 rounded-lg transition-colors ${mode === 'desktop'
-                  ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400'
-                  : 'text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5'
-                  }`}
-                title="Desktop"
-              >
-                <Monitor size={16} />
-              </button>
-              <button
-                onClick={() => onModeChange('mobile')}
-                className={`p-1.5 rounded-lg transition-colors ${mode === 'mobile'
-                  ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400'
-                  : 'text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5'
-                  }`}
-                title="Mobile"
-              >
-                <Smartphone size={16} />
-              </button>
-              <div className="w-px h-4 bg-slate-200 dark:bg-white/10 mx-0.5" />
-            </>
-          )}
-
-          {/* Botão editor visual / preview */}
-          {canEdit && (
-            <button
-              onClick={() => setIsEditMode(v => !v)}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${isEditMode
-                ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400'
-                : 'text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5'
-                }`}
-              title={isEditMode ? 'Ver preview' : 'Editar visualmente'}
-            >
-              {isEditMode ? <><Eye size={14} /> Visualizar</> : <><Pencil size={14} /> Editar</>}
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Preview iframe */}
-      <div className="flex-1 overflow-auto bg-slate-100 dark:bg-slate-900 flex items-start justify-center p-4">
-        <div
-          className={`relative bg-white shadow-xl rounded-lg overflow-hidden transition-all duration-300 ${mode === 'mobile' ? 'w-[390px]' : 'w-full max-w-5xl'}`}
-        >
-          <iframe
-            ref={iframeRef}
-            className="w-full"
-            style={{ height: iframeHeight, border: 'none', transition: 'height .3s' }}
-            sandbox="allow-scripts allow-forms allow-same-origin"
-            title="Preview da Landing Page"
-          />
-          {isGenerating && (
-            <div className="absolute inset-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm flex flex-col items-center justify-center gap-3">
-              <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
-              <p className="text-sm font-medium text-slate-600 dark:text-slate-300">Gerando com IA...</p>
-              <p className="text-xs text-slate-400">Pode levar até 2 minutos</p>
-            </div>
-          )}
-        </div>
-      </div>
+      {toolbar}
+      {iframeArea}
     </div>
   );
 }

@@ -59,117 +59,40 @@ REGRAS TÉCNICAS OBRIGATÓRIAS
 10. Respeitar prefers-reduced-motion em TODA animação
 
 ═══════════════════════════════════════════════════════════════
-SISTEMA DE TOKENS — INJETAR ESTE <style> BLOCK NO <head> OBRIGATORIAMENTE
+SISTEMA DE TOKENS — INJETADO AUTOMATICAMENTE (NÃO EMITA)
 ═══════════════════════════════════════════════════════════════
 
-Você DEVE incluir este bloco <style> dentro do <head>, IMEDIATAMENTE após a tag do Tailwind CDN. Use as variáveis CSS via "style=" inline ou via classes utilitárias customizadas. NUNCA use cores Tailwind hardcoded como bg-blue-600, text-gray-700, bg-green-500. SEMPRE use estes tokens semânticos:
+IMPORTANTE: O bloco <style> com os design tokens OKLCH, as classes utilitárias (.h-hero, .h-section, .btn-primary, .card, .glass, .reveal, etc.), o Tailwind CDN, as Google Fonts (Inter, Space Grotesk, Cinzel) e o script de motion serão INJETADOS AUTOMATICAMENTE pelo sistema após a geração. Você NÃO deve emitir esses blocos — isso economiza tokens para o conteúdo real.
 
-<style>
-  :root {
-    /* Backgrounds */
-    --color-bg: oklch(97% 0.005 90);
-    --color-surface: oklch(99% 0.002 90);
-    --color-muted: oklch(95% 0.008 90);
-    --color-border: oklch(90% 0.01 90);
-    --color-border-subtle: oklch(93% 0.008 90);
+O que você DEVE fazer:
+1. USE as variáveis CSS nos style="" inline: var(--color-primary-600), var(--color-bg), var(--color-text-secondary), etc.
+2. USE as classes utilitárias: .h-hero, .h-section, .h-sub, .t-eyebrow, .t-body, .t-big-num, .btn-primary, .btn-secondary, .card, .card-lift, .glass, .reveal, .font-display, .font-serif
+3. NUNCA use cores Tailwind hardcoded: bg-blue-600, text-gray-700, bg-green-500 → use var(--color-*)
+4. Se precisar de estilos ADICIONAIS (aurora blobs, gradient text, glow, etc.), adicione em um <style> SEPARADO no <head> — nunca replique os tokens base
 
-    /* Texto */
-    --color-text-primary: oklch(25% 0.015 260);
-    --color-text-secondary: oklch(45% 0.02 260);
-    --color-text-muted: oklch(55% 0.025 260);
-    --color-text-subtle: oklch(62% 0.025 260);
-
-    /* Paleta primária */
-    --color-primary-50: #f0f9ff;
-    --color-primary-100: #e0f2fe;
-    --color-primary-200: #bae6fd;
-    --color-primary-500: #0ea5e9;
-    --color-primary-600: #0284c7;
-    --color-primary-700: #0369a1;
-    --color-primary-800: #075985;
-    --color-primary-900: #0c4a6e;
-
-    /* Status */
-    --color-success: oklch(65% 0.17 145);
-    --color-success-bg: oklch(65% 0.17 145 / 0.1);
-    --color-success-text: oklch(40% 0.15 145);
-    --color-warning: oklch(75% 0.15 85);
-    --color-warning-bg: oklch(75% 0.15 85 / 0.1);
-    --color-error: oklch(62% 0.25 25);
-    --color-info: oklch(60% 0.20 240);
-    --color-orange: oklch(70% 0.18 55);
-
-    /* Glass */
-    --glass-bg: oklch(99% 0.002 90 / 0.8);
-    --glass-border: oklch(90% 0.01 90 / 0.5);
-    --glass-blur: 12px;
-
-    /* Tipografia */
-    --font-sans: 'Inter', sans-serif;
-    --font-display: 'Space Grotesk', sans-serif;
-    --font-serif: 'Cinzel', serif;
-  }
-
-  .dark {
-    --color-bg: oklch(11% 0.025 260);
-    --color-surface: oklch(15% 0.02 260);
-    --color-muted: oklch(22% 0.015 260);
-    --color-border: oklch(26% 0.012 260);
-    --color-border-subtle: oklch(22% 0.01 260 / 0.6);
-    --color-text-primary: oklch(98% 0.002 260);
-    --color-text-secondary: oklch(83% 0.015 260);
-    --color-text-muted: oklch(72% 0.02 260);
-    --color-text-subtle: oklch(62% 0.025 260);
-    --glass-bg: oklch(15% 0.02 260 / 0.75);
-    --glass-border: oklch(100% 0 0 / 0.05);
-  }
-
-  html, body { background: var(--color-bg); color: var(--color-text-primary); font-family: var(--font-sans); }
-  body { -webkit-font-smoothing: antialiased; }
-
-  /* Tipografia em camadas */
-  .font-display { font-family: var(--font-display); }
-  .font-serif { font-family: var(--font-serif); }
-  .h-hero { font-family: var(--font-display); font-size: clamp(40px, 6vw, 72px); font-weight: 700; line-height: 1.05; letter-spacing: -0.02em; }
-  .h-section { font-family: var(--font-sans); font-size: clamp(32px, 4vw, 48px); font-weight: 700; line-height: 1.1; letter-spacing: -0.01em; }
-  .h-sub { font-family: var(--font-sans); font-size: clamp(20px, 2vw, 24px); font-weight: 600; line-height: 1.3; }
-  .t-eyebrow { font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-primary-600); }
-  .t-body { font-size: 17px; line-height: 1.6; color: var(--color-text-secondary); }
-  .t-big-num { font-family: var(--font-display); font-size: clamp(56px, 8vw, 96px); font-weight: 700; line-height: 1; letter-spacing: -0.02em; color: var(--color-primary-600); }
-
-  /* Botões */
-  .btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 16px 32px; min-height: 56px; background: var(--color-primary-600); color: white; font-weight: 600; font-size: 16px; border-radius: 12px; transition: transform .25s cubic-bezier(0.22,1,0.36,1), box-shadow .25s, background .2s; box-shadow: 0 8px 24px -8px oklch(60% 0.18 240 / 0.4); cursor: pointer; border: none; }
-  .btn-primary:hover { background: var(--color-primary-700); transform: translateY(-2px); box-shadow: 0 12px 32px -8px oklch(60% 0.18 240 / 0.5); }
-  .btn-secondary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 16px 32px; min-height: 56px; background: transparent; color: var(--color-text-primary); font-weight: 600; font-size: 16px; border-radius: 12px; border: 1.5px solid var(--color-border); transition: all .2s; cursor: pointer; }
-  .btn-secondary:hover { background: var(--color-muted); border-color: var(--color-text-muted); }
-
-  /* Cards */
-  .card { background: var(--color-surface); border: 1px solid var(--color-border-subtle); border-radius: 16px; padding: 32px; transition: transform .25s cubic-bezier(0.22,1,0.36,1), box-shadow .25s; }
-  .card-lift:hover { transform: translateY(-4px); box-shadow: 0 24px 48px -16px oklch(0% 0 0 / 0.15); }
-
-  /* Glass */
-  .glass { background: var(--glass-bg); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur)); border-bottom: 1px solid var(--glass-border); }
-
-  /* Reveal on scroll */
-  .reveal { opacity: 0; transform: translateY(24px); transition: opacity .7s cubic-bezier(0.22,1,0.36,1), transform .7s cubic-bezier(0.22,1,0.36,1); }
-  .reveal.in { opacity: 1; transform: translateY(0); }
-
-  @media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
-    .reveal { opacity: 1 !important; transform: none !important; }
-  }
-</style>
+Tokens disponíveis para referência (NÃO emita — já injetados):
+- Backgrounds: --color-bg, --color-surface, --color-muted, --color-border, --color-border-subtle
+- Texto: --color-text-primary, --color-text-secondary, --color-text-muted, --color-text-subtle
+- Primária: --color-primary-50/100/200/500/600/700/800/900
+- Status: --color-success, --color-success-bg, --color-success-text, --color-error, --color-warning, --color-orange, --color-info
+- Glass: --glass-bg, --glass-border, --glass-blur
+- Fontes: --font-sans (Inter), --font-display (Space Grotesk), --font-serif (Cinzel)
 
 ═══════════════════════════════════════════════════════════════
 ESTRUTURA OBRIGATÓRIA — 10 SEÇÕES NA ORDEM EXATA
 ═══════════════════════════════════════════════════════════════
 
-1. **TOP BAR** (sticky, glass)
+ATRIBUTO OBRIGATÓRIO: Cada <section> DEVE ter data-section="nome" para identificação:
+data-section="hero", data-section="logos", data-section="problem", data-section="solution",
+data-section="features", data-section="testimonial", data-section="numbers", data-section="faq",
+data-section="cta-final". Top bar e footer usam <header data-section="topbar"> e <footer data-section="footer">.
+
+1. **TOP BAR** (<header data-section="topbar">, sticky, glass)
    - Logo/nome + nav âncora curta (3-4 itens) + 1 CTA mini "Começar grátis"
    - Altura ~64px, classe .glass, posição sticky top:0
    - NÃO ter mais que 4 links de nav
 
-2. **HERO** (above the fold, ≤100vh, máximo 90vh em mobile)
+2. **HERO** (<section data-section="hero">, above the fold, ≤100vh, máximo 90vh em mobile)
    Estrutura em CAMADAS — nunca chapado:
    - Eyebrow/overline (.t-eyebrow): categoria curta — ex "PARA EQUIPES B2B"
    - Headline (.h-hero): TRANSFORMAÇÃO emocional — fórmula "[Resultado] sem [fricção]" ou "[Verbo] [número] em [tempo]"
@@ -517,7 +440,23 @@ Incluir no <head>:
 - <title>, <meta name="description">
 - Open Graph tags (og:title, og:description, og:image, og:url)
 - viewport meta tag
-- charset utf-8`;
+- charset utf-8
+
+═══════════════════════════════════════════════════════════════
+CHECKLIST FINAL — VERIFICAR ANTES DE EMITIR
+═══════════════════════════════════════════════════════════════
+
+Antes de emitir o HTML, verifique mentalmente:
+□ NÃO emiti o bloco <style> de tokens base (será injetado automaticamente)
+□ Usei as classes utilitárias (.h-hero, .btn-primary, .card, .reveal, etc.)
+□ NÃO usei cores Tailwind hardcoded (bg-blue-600, text-gray-700) — usei var(--color-*)
+□ Cada <section> tem data-section="..." para identificação
+□ O <form id="lead-form"> está COMPLETO com todos os campos e o <script> de submit
+□ Todas as seções estão fechadas (nenhum </section> faltando)
+□ O HTML termina com </body></html>
+□ Hero tem: eyebrow + headline + sub + proof + 2 CTAs + trust + visual
+□ Pelo menos 1 efeito visual premium (aurora, gradient text, glow, ou glass)
+□ Copy dos CTAs usa verbo + ganho (NÃO "Saiba mais" ou "Cadastre-se")`;
 
 // =============================================================================
 // Helpers para montar o prompt final
@@ -581,7 +520,7 @@ REGRAS OBRIGATÓRIAS:
 1. Retorne APENAS o HTML COMPLETO e atualizado, sem markdown, sem explicações, sem code fences
 2. Mantenha TODO o JavaScript de submissão do formulário (fetch, handlers) INTACTO
 3. Preserve os campos do formulário, webhook URL e api-key existentes
-4. Preserve o <style> block com tokens OKLCH no <head> — se não existir, ADICIONE
+4. O <style> de design tokens OKLCH é INJETADO AUTOMATICAMENTE — NÃO o emita, mas USE as variáveis var(--color-*) e classes (.h-hero, .btn-primary, etc.)
 5. Mantenha o HTML auto-contido (sem dependências externas além das CDNs)
 6. Aplique APENAS as alterações solicitadas — não reescreva o que não foi pedido
 
@@ -614,36 +553,18 @@ REGRAS TÉCNICAS:
 5. Retornar APENAS HTML, sem markdown, sem code fences
 6. Respeitar prefers-reduced-motion
 
-STYLE BLOCK OBRIGATÓRIO NO <head> (após Tailwind CDN):
-<style>
-:root{--color-bg:oklch(97% .005 90);--color-surface:oklch(99% .002 90);--color-muted:oklch(95% .008 90);--color-border:oklch(90% .01 90);--color-text-primary:oklch(25% .015 260);--color-text-secondary:oklch(45% .02 260);--color-text-muted:oklch(55% .025 260);--color-primary-50:#f0f9ff;--color-primary-100:#e0f2fe;--color-primary-500:#0ea5e9;--color-primary-600:#0284c7;--color-primary-700:#0369a1;--color-success:oklch(65% .17 145);--color-success-text:oklch(40% .15 145);--color-error:oklch(62% .25 25);--glass-bg:oklch(99% .002 90/.8);--glass-border:oklch(90% .01 90/.5);--glass-blur:12px;--font-sans:'Inter',sans-serif;--font-display:'Space Grotesk',sans-serif}
-.dark{--color-bg:oklch(11% .025 260);--color-surface:oklch(15% .02 260);--color-muted:oklch(22% .015 260);--color-border:oklch(26% .012 260);--color-text-primary:oklch(98% .002 260);--color-text-secondary:oklch(83% .015 260);--glass-bg:oklch(15% .02 260/.75)}
-html,body{background:var(--color-bg);color:var(--color-text-primary);font-family:var(--font-sans);-webkit-font-smoothing:antialiased}
-.font-display{font-family:var(--font-display)}
-.h-hero{font-family:var(--font-display);font-size:clamp(36px,6vw,64px);font-weight:700;line-height:1.1;letter-spacing:-.02em}
-.h-section{font-size:clamp(28px,4vw,40px);font-weight:700;line-height:1.15}
-.h-sub{font-size:20px;font-weight:600;line-height:1.4}
-.t-eyebrow{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--color-primary-600)}
-.t-body{font-size:17px;line-height:1.6;color:var(--color-text-secondary)}
-.btn-primary{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:14px 28px;min-height:52px;background:var(--color-primary-600);color:#fff;font-weight:600;font-size:16px;border-radius:12px;border:none;cursor:pointer;transition:all .2s}
-.btn-primary:hover{background:var(--color-primary-700);transform:translateY(-2px)}
-.btn-secondary{display:inline-flex;align-items:center;gap:8px;padding:14px 28px;min-height:52px;background:transparent;color:var(--color-text-primary);font-weight:600;border-radius:12px;border:1.5px solid var(--color-border);cursor:pointer;transition:all .2s}
-.card{background:var(--color-surface);border:1px solid var(--color-border);border-radius:16px;padding:24px;transition:transform .2s}
-.card:hover{transform:translateY(-4px)}
-.glass{background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur));border-bottom:1px solid var(--glass-border)}
-.reveal{opacity:0;transform:translateY(20px);transition:opacity .6s,transform .6s}.reveal.in{opacity:1;transform:none}
-@media(prefers-reduced-motion:reduce){.reveal{opacity:1!important;transform:none!important}}
-</style>
+DESIGN TOKENS — INJETADOS AUTOMATICAMENTE (NÃO EMITA):
+O <style> com tokens OKLCH, classes (.h-hero, .btn-primary, .card, .glass, .reveal), Tailwind CDN, Google Fonts e script de motion serão injetados pelo sistema. NÃO os emita. USE as variáveis CSS (var(--color-primary-600), var(--color-bg), etc.) e classes utilitárias. NUNCA use cores Tailwind hardcoded (bg-blue-600).
 
-ESTRUTURA (6-8 seções, na ordem):
-1. TOP BAR: sticky glass, logo + 3 nav links + mini CTA
-2. HERO: eyebrow (.t-eyebrow) + headline (.h-hero, fórmula "[Resultado] sem [fricção]") + sub (18px) + proof row (+X empresas OU rating) + 2 CTAs (.btn-primary + .btn-secondary) + trust microcopy + visual
-3. PROBLEMA/DOR: 3 colunas, ícone SVG + título + 1 frase
-4. COMO FUNCIONA: 3 passos numerados
-5. BENEFÍCIOS: grid 3 colunas com .card, ícone SVG + título + descrição
-6. DEPOIMENTO: 1 grande, foto + quote + nome/cargo + métrica
-7. FAQ: 3-5 objeções reais com <details>
-8. CTA FINAL + FORM + FOOTER minimalista
+ESTRUTURA (6-8 seções, na ordem). CADA <section> DEVE ter data-section="nome":
+1. TOP BAR (<header data-section="topbar">): sticky glass, logo + 3 nav links + mini CTA
+2. HERO (<section data-section="hero">): eyebrow (.t-eyebrow) + headline (.h-hero, fórmula "[Resultado] sem [fricção]") + sub (18px) + proof row (+X empresas OU rating) + 2 CTAs (.btn-primary + .btn-secondary) + trust microcopy + visual
+3. PROBLEMA (<section data-section="problem">): 3 colunas, ícone SVG + título + 1 frase
+4. COMO FUNCIONA (<section data-section="solution">): 3 passos numerados
+5. BENEFÍCIOS (<section data-section="features">): grid 3 colunas com .card, ícone SVG + título + descrição
+6. DEPOIMENTO (<section data-section="testimonial">): 1 grande, foto + quote + nome/cargo + métrica
+7. FAQ (<section data-section="faq">): 3-5 objeções reais com <details>
+8. CTA FINAL (<section data-section="cta-final">) + FORM + <footer data-section="footer"> minimalista
 
 CTAs: NUNCA "Saiba mais"/"Cadastre-se". Use verbo + ganho: "Começar grátis agora", "Quero meu diagnóstico".
 
@@ -684,7 +605,9 @@ document.getElementById('lead-form').addEventListener('submit', async function(e
 </script>
 
 DADOS: Nome da empresa: {{ORG_NAME}}
-SEO: <title>, <meta name="description">, OG tags, viewport, charset utf-8`;
+SEO: <title>, <meta name="description">, OG tags, viewport, charset utf-8
+
+CHECKLIST: □ NÃO emiti style block de tokens (injetado auto) □ Usei classes (.h-hero, .btn-primary, .card, .reveal) □ Cada <section> tem data-section □ Form completo □ HTML termina com </body></html> □ Hero tem eyebrow+headline+sub+proof+2CTAs □ CTAs com verbo+ganho (NÃO "Saiba mais")`;
 
 export function buildRefinementPrompt(
   instruction: string,

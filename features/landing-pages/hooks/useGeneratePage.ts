@@ -2,6 +2,7 @@
 
 import { useMutation } from '@tanstack/react-query';
 import type { LandingPageField } from '@/types';
+import { postProcessHtml } from '../lib/html-postprocess';
 
 interface GeneratePageParams {
   prompt: string;
@@ -80,7 +81,10 @@ export function useGeneratePage() {
           );
         }
 
-        return { html: cleaned, model: 'stream' };
+        // Post-processa: garante design tokens, fonts, Tailwind CDN, motion script
+        const processed = postProcessHtml(cleaned);
+
+        return { html: processed, model: 'stream' };
       } finally {
         clearTimeout(timeout);
       }
