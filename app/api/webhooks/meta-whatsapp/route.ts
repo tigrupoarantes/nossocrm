@@ -19,6 +19,7 @@ import { createStaticAdminClient } from '@/lib/supabase/server'
 import { onResponseReceived } from '@/lib/automation/triggers'
 import { processWithSuperAgent } from '@/lib/ai/super-agent/engine'
 import { resolveMetaConfigByPhoneNumberId } from '@/lib/communication/meta-config-resolver'
+import { rehostMetaMedia } from '@/lib/communication/media-rehost'
 
 export const runtime = 'nodejs'
 
@@ -38,6 +39,10 @@ interface MetaWebhookEntry {
         id: string
         timestamp: string
         text?: { body: string }
+        image?: { id: string; mime_type?: string; caption?: string; sha256?: string }
+        audio?: { id: string; mime_type?: string; voice?: boolean }
+        video?: { id: string; mime_type?: string; caption?: string }
+        document?: { id: string; mime_type?: string; caption?: string; filename?: string }
         type: string
       }>
       statuses?: Array<{
@@ -126,6 +131,22 @@ async function resolveOrganizationByPhoneNumberId(
   return resolved?.organizationId ?? null
 }
 
+/**
+ * Mesma função mas retorna também o accessToken, necessário para baixar
+ * mídia do Graph API.
+ */
+async function resolveMetaContextByPhoneNumberId(
+  supabase: AdminClient,
+  phoneNumberId: string | null | undefined
+): Promise<{ organizationId: string; accessToken: string | null } | null> {
+  const resolved = await resolveMetaConfigByPhoneNumberId(supabase, phoneNumberId)
+  if (!resolved?.organizationId) return null
+  return {
+    organizationId: resolved.organizationId,
+    accessToken: resolved.accessToken ?? null,
+  }
+}
+
 async function findContactByPhone(
   supabase: AdminClient,
   organizationId: string,
@@ -205,6 +226,8 @@ async function persistInboundMessage(
     waMessageId: string
     body: string
     sentAt: string
+    messageType?: 'text' | 'image' | 'audio' | 'video' | 'document' | 'file'
+    mediaUrl?: string | null
   }
 ): Promise<string | null> {
   // 1) Tenta achar conversa existente em qualquer formato (defensivo).
@@ -266,9 +289,10 @@ async function persistInboundMessage(
       wa_message_id: params.waMessageId,
       external_message_id: params.waMessageId,
       channel: 'whatsapp',
-      message_type: 'text',
+      message_type: params.messageType ?? 'text',
       direction: 'inbound',
       body: params.body,
+      media_url: params.mediaUrl ?? null,
       status: 'delivered',
       sent_at: params.sentAt,
     },
@@ -392,12 +416,15 @@ export async function POST(request: Request) {
       const messages = value.messages ?? []
       if (messages.length === 0) continue
 
-      // Resolver org UMA vez por change (todas as messages do mesmo
-      // phone_number_id). Mais barato e mais correto que por mensagem.
-      const organizationId = await resolveOrganizationByPhoneNumberId(
+      // Resolver org + accessToken UMA vez por change (todas as messages
+      // do mesmo phone_number_id). accessToken é necessário para baixar
+      // mídia via Graph API.
+      const metaContext = await resolveMetaContextByPhoneNumberId(
         supabase,
         phoneNumberId,
       )
+      const organizationId = metaContext?.organizationId ?? null
+      const accessToken = metaContext?.accessToken ?? null
 
       if (!organizationId) {
         console.warn('[MetaWebhook] inbound dropped — phone_number_id has no org', {
@@ -414,19 +441,63 @@ export async function POST(request: Request) {
       }
 
       for (const message of messages) {
-        // Por enquanto só processamos texto. Mídia entra na próxima rodada.
-        if (message.type !== 'text' || !message.text?.body) {
-          console.log('[MetaWebhook] skipping non-text message', { type: message.type, id: message.id })
+        const fromRaw = message.from
+        const messageId = message.id
+        const timestamp = parseInt(message.timestamp, 10)
+        const sentAt = new Date(timestamp * 1000).toISOString()
+
+        // Texto, imagem, áudio, vídeo, documento. Outros tipos caem no drop.
+        let body = ''
+        let messageType: 'text' | 'image' | 'audio' | 'video' | 'document' | 'file' = 'text'
+        let mediaUrl: string | null = null
+        let mediaId: string | null = null
+        let mediaMimetype: string | undefined
+
+        if (message.type === 'text' && message.text?.body) {
+          body = message.text.body
+        } else if (message.type === 'image' && message.image?.id) {
+          mediaId = message.image.id
+          mediaMimetype = message.image.mime_type
+          body = message.image.caption ?? ''
+          messageType = 'image'
+        } else if (message.type === 'audio' && message.audio?.id) {
+          mediaId = message.audio.id
+          mediaMimetype = message.audio.mime_type
+          messageType = 'audio'
+        } else if (message.type === 'video' && message.video?.id) {
+          mediaId = message.video.id
+          mediaMimetype = message.video.mime_type
+          body = message.video.caption ?? ''
+          messageType = 'video'
+        } else if (message.type === 'document' && message.document?.id) {
+          mediaId = message.document.id
+          mediaMimetype = message.document.mime_type
+          body = message.document.caption ?? message.document.filename ?? ''
+          messageType = 'document'
+        } else {
+          console.log('[MetaWebhook] skipping unsupported message type', { type: message.type, id: messageId })
           result.inboundDropped += 1
           result.droppedReasons.push(`unsupported_type:${message.type}`)
           continue
         }
 
-        const fromRaw = message.from
-        const messageId = message.id
-        const body = message.text.body
-        const timestamp = parseInt(message.timestamp, 10)
-        const sentAt = new Date(timestamp * 1000).toISOString()
+        // Se há mídia, baixa do Graph API (precisa accessToken) e rehospeda
+        // no bucket conversation-attachments. URLs do Meta expiram rápido.
+        if (mediaId) {
+          if (!accessToken) {
+            console.error('[MetaWebhook] mídia recebida mas sem accessToken configurado', { mediaId })
+          } else {
+            const rehosted = await rehostMetaMedia(supabase, {
+              mediaId,
+              accessToken,
+              organizationId,
+              mimetype: mediaMimetype,
+            })
+            if (rehosted) {
+              mediaUrl = rehosted.publicUrl
+            }
+          }
+        }
 
         if (!fromRaw) {
           result.inboundDropped += 1
@@ -450,6 +521,8 @@ export async function POST(request: Request) {
           waMessageId: messageId,
           body,
           sentAt,
+          messageType,
+          mediaUrl,
         })
 
         if (!conversationId) {

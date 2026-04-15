@@ -32,6 +32,7 @@ import { createStaticAdminClient } from '@/lib/supabase/server';
 import { onResponseReceived } from '@/lib/automation/triggers';
 import { processWithSuperAgent } from '@/lib/ai/super-agent/engine';
 import { resolveWahaConfigBySession } from '@/lib/communication/meta-config-resolver';
+import { rehostInboundMedia, categorizeMime } from '@/lib/communication/media-rehost';
 
 export const runtime = 'nodejs';
 
@@ -46,6 +47,14 @@ interface WahaWebhookPayload {
   fromMe?: boolean;
   hasMedia?: boolean;
   timestamp?: number;
+  /** WAHA inclui metadados da mídia quando hasMedia=true. */
+  media?: {
+    url?: string;
+    mimetype?: string;
+    filename?: string | null;
+  };
+  /** Fallback: alguns payloads colocam mediaUrl direto. */
+  mediaUrl?: string;
   /** WAHA GOWS engine inclui dados extras com o telefone real em _data.Info.SenderAlt */
   _data?: {
     Info?: {
@@ -199,6 +208,8 @@ async function persistInboundMessage(
     waMessageId: string;
     body: string;
     sentAt: string;
+    messageType?: 'text' | 'image' | 'audio' | 'video' | 'document' | 'file';
+    mediaUrl?: string | null;
   },
 ): Promise<string | null> {
   const existing = await findExistingConversation(
@@ -259,9 +270,10 @@ async function persistInboundMessage(
       wa_message_id: params.waMessageId,
       external_message_id: params.waMessageId,
       channel: 'whatsapp',
-      message_type: 'text',
+      message_type: params.messageType ?? 'text',
       direction: 'inbound',
       body: params.body,
+      media_url: params.mediaUrl ?? null,
       status: 'delivered',
       sent_at: params.sentAt,
     },
@@ -377,6 +389,28 @@ export async function POST(request: Request) {
     ? await findActiveDealForContact(supabase, organizationId, contactId)
     : null;
 
+  // Se a mensagem tem mídia, baixa e rehospeda no bucket conversation-attachments.
+  // Sem isso, a URL do WAHA pode expirar ou depender de rede interna do servidor.
+  let messageType: 'text' | 'image' | 'audio' | 'video' | 'document' | 'file' = 'text';
+  let mediaUrl: string | null = null;
+  const sourceMediaUrl = payload?.media?.url || payload?.mediaUrl;
+  if (payload?.hasMedia && sourceMediaUrl) {
+    const rehosted = await rehostInboundMedia(supabase, {
+      sourceUrl: sourceMediaUrl,
+      organizationId,
+      mimetype: payload?.media?.mimetype,
+      filenameHint: payload?.media?.filename ?? undefined,
+    });
+    if (rehosted) {
+      mediaUrl = rehosted.publicUrl;
+      messageType = rehosted.mediaType;
+    } else {
+      console.warn('[WahaWebhook] rehost falhou — guardando URL original', { url: sourceMediaUrl.slice(0, 100) });
+      mediaUrl = sourceMediaUrl;
+      messageType = payload?.media?.mimetype ? categorizeMime(payload.media.mimetype) : 'file';
+    }
+  }
+
   // Persistir SEMPRE — não deixar cair só porque não tem deal
   const conversationId = await persistInboundMessage(supabase, {
     organizationId,
@@ -386,6 +420,8 @@ export async function POST(request: Request) {
     waMessageId: messageId || `${normalizedPhone}-${timestamp}`,
     body,
     sentAt,
+    messageType,
+    mediaUrl,
   });
 
   if (!conversationId) {
