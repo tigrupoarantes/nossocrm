@@ -30,14 +30,22 @@ export function MessageInput({
   const [channel, setChannel] = useState<ConversationChannel>(
     defaultChannel ?? availableChannels[0] ?? 'whatsapp'
   );
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  const autoGrow = (el: HTMLTextAreaElement) => {
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 128)}px`;
+  };
 
   const handleSend = async () => {
     const trimmed = body.trim();
     if (!trimmed || isSending || disabled) return;
     await onSend(trimmed, channel);
     setBody('');
-    inputRef.current?.focus();
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto';
+      inputRef.current.focus();
+    }
   };
 
   return (
@@ -60,22 +68,23 @@ export function MessageInput({
         </div>
       )}
 
-      {/* Input de texto + botão enviar */}
-      <div className="flex gap-2">
-        <input
+      {/* Textarea (Shift+Enter = nova linha, Enter = enviar) + botão enviar */}
+      <div className="flex gap-2 items-end">
+        <textarea
           ref={inputRef}
-          type="text"
+          rows={1}
           value={body}
           onChange={e => setBody(e.target.value)}
+          onInput={e => autoGrow(e.currentTarget)}
           onKeyDown={e => {
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();
               void handleSend();
             }
           }}
-          placeholder="Digite uma mensagem..."
+          placeholder="Digite uma mensagem... (Shift+Enter para nova linha)"
           disabled={disabled || isSending}
-          className="flex-1 bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
+          className="flex-1 bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 resize-none max-h-32 leading-snug"
         />
         <button
           onClick={() => void handleSend()}

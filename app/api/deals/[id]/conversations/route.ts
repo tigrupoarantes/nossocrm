@@ -70,10 +70,27 @@ export async function GET(_req: Request, { params }: RouteParams) {
     return NextResponse.json({ error: 'Failed to fetch messages' }, { status: 500 });
   }
 
-  // Agrupar mensagens por conversation_id
-  const messagesByConv = new Map<string, typeof messages>();
-  for (const msg of messages ?? []) {
-    const convId = msg.conversation_id as string;
+  // Transformar mensagens snake_case → camelCase para alinhar com o tipo `Message`
+  // usado no client (MessageBubble lê `mediaUrl`, `messageType`, etc).
+  const normalizedMessages = (messages ?? []).map(msg => ({
+    id: msg.id,
+    conversationId: msg.conversation_id,
+    channel: msg.channel,
+    externalMessageId: msg.external_message_id,
+    messageType: msg.message_type,
+    direction: msg.direction,
+    body: msg.body,
+    mediaUrl: msg.media_url,
+    status: msg.status,
+    sentAt: msg.sent_at,
+    createdAt: msg.created_at,
+    metadata: msg.metadata,
+  }));
+
+  // Agrupar mensagens por conversationId
+  const messagesByConv = new Map<string, typeof normalizedMessages>();
+  for (const msg of normalizedMessages) {
+    const convId = msg.conversationId as string;
     if (!messagesByConv.has(convId)) messagesByConv.set(convId, []);
     messagesByConv.get(convId)!.push(msg);
   }
