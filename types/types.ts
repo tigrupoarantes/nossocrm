@@ -550,6 +550,8 @@ export interface AutomationRule {
     cancelPending?: boolean;
     /** Override do provider WhatsApp. 'auto' = WAHA se configurado, senão Twilio. */
     whatsappProvider?: 'auto' | 'waha' | 'twilio';
+    /** Corpo livre da mensagem (UI de regras). Interpola {{nome_contato}} etc. */
+    body?: string;
   };
   isActive: boolean;
   position: number;

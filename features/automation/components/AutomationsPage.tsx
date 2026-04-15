@@ -72,7 +72,7 @@ function useBoardStages() {
             id: s.id,
             name: s.name,
             label: s.label ?? undefined,
-            boardId: s.boardId,
+            boardId: s.board_id,
             order: s.order ?? undefined,
           })));
         }
