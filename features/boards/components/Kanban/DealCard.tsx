@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import Image from 'next/image';
 import { DealView } from '@/types';
-import { Building2, Hourglass, Trophy, XCircle } from 'lucide-react';
+import { Building2, FileText, Hourglass, Mail, Phone, Trophy, User, XCircle } from 'lucide-react';
 import { ActivityStatusIcon } from './ActivityStatusIcon';
 import { priorityAriaLabelPtBr } from '@/lib/utils/priority';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { formatCNPJMask } from '@/lib/integrations/cnpj';
 
 interface DealCardProps {
   deal: DealView;
@@ -150,7 +152,15 @@ const DealCardComponent: React.FC<DealCardProps> = ({
     return parts.join(', ');
   };
 
-  return (
+  const hasLeadInfo = Boolean(
+    deal.contactName ||
+    deal.companyCnpj ||
+    deal.companyName ||
+    deal.contactEmail ||
+    deal.contactPhone
+  );
+
+  const cardInner = (
     <div
       data-deal-id={deal.id}
       draggable={!deal.id.startsWith('temp-')}
@@ -277,6 +287,50 @@ const DealCardComponent: React.FC<DealCardProps> = ({
         </div>
       </div>
     </div>
+  );
+
+  if (!hasLeadInfo) return cardInner;
+
+  return (
+    <TooltipProvider delayDuration={300}>
+      <Tooltip>
+        <TooltipTrigger asChild>{cardInner}</TooltipTrigger>
+        <TooltipContent side="right" align="start" className="max-w-70 p-0 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
+          <div className="px-3 py-2 space-y-1.5 text-xs">
+            {deal.contactName && deal.contactName !== 'Sem contato' && (
+              <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
+                <User size={12} aria-hidden="true" className="shrink-0 text-slate-400" />
+                <span className="font-medium truncate">{deal.contactName}</span>
+              </div>
+            )}
+            {deal.companyCnpj && (
+              <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
+                <FileText size={12} aria-hidden="true" className="shrink-0 text-slate-400" />
+                <span className="font-mono truncate">{formatCNPJMask(deal.companyCnpj)}</span>
+              </div>
+            )}
+            {deal.companyName && deal.companyName !== 'Sem empresa' && (
+              <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
+                <Building2 size={12} aria-hidden="true" className="shrink-0 text-slate-400" />
+                <span className="truncate">{deal.companyName}</span>
+              </div>
+            )}
+            {deal.contactEmail && (
+              <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
+                <Mail size={12} aria-hidden="true" className="shrink-0 text-slate-400" />
+                <span className="truncate">{deal.contactEmail}</span>
+              </div>
+            )}
+            {deal.contactPhone && (
+              <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
+                <Phone size={12} aria-hidden="true" className="shrink-0 text-slate-400" />
+                <span className="truncate">{deal.contactPhone}</span>
+              </div>
+            )}
+          </div>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 };
 

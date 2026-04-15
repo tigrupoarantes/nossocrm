@@ -133,6 +133,15 @@ export const companyFormSchema = z.object({
       val => val === '' || /^[a-z0-9.-]+\.[a-z]{2,}.*$/i.test(val),
       'Website inválido'
     ),
+  cnpj: z
+    .string()
+    .optional()
+    .or(z.literal(''))
+    .transform(val => (val || '').replace(/\D/g, ''))
+    .refine(
+      val => val === '' || val.length === 14,
+      'CNPJ deve ter 14 dígitos'
+    ),
 });
 
 export type CompanyFormData = z.infer<typeof companyFormSchema>;

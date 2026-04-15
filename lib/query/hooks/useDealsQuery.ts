@@ -209,8 +209,10 @@ export const useDealsByBoard = (boardId: string) => {
         return {
           ...deal,
           companyName: company?.name || 'Sem empresa',
+          companyCnpj: company?.cnpj || '',
           contactName: contact?.name || 'Sem contato',
           contactEmail: contact?.email || '',
+          contactPhone: contact?.phone || '',
           stageLabel: stageMap.get(deal.status) || 'Estágio não identificado',
         };
       });

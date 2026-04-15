@@ -140,6 +140,7 @@ export interface CRMCompany {
   name: string;
   industry?: string;
   website?: string;
+  cnpj?: string;
   createdAt: string;
   updatedAt?: string;
 }
@@ -248,6 +249,8 @@ export interface DealView extends Deal {
   clientCompanyName?: string; // Name of the CRM client company
   contactName: string;
   contactEmail: string;
+  contactPhone?: string;
+  companyCnpj?: string;
   /** Nome/label do estágio atual (resolvido a partir do status UUID) */
   stageLabel: string;
 

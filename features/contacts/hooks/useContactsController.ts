@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useToast } from '@/context/ToastContext';
-import { Contact, Company, ContactStage, PaginationState, ContactsServerFilters, DEFAULT_PAGE_SIZE, ContactSortableColumn } from '@/types';
+import { Contact, CRMCompany, ContactStage, PaginationState, ContactsServerFilters, DEFAULT_PAGE_SIZE, ContactSortableColumn } from '@/types';
 import {
   useContacts,
   useContactsPaginated,
@@ -151,7 +151,7 @@ export const useContactsController = () => {
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
-  const [editingCompany, setEditingCompany] = useState<Company | null>(null);
+  const [editingCompany, setEditingCompany] = useState<CRMCompany | null>(null);
   const [deleteCompanyId, setDeleteCompanyId] = useState<string | null>(null);
   const [deleteWithDeals, setDeleteWithDeals] = useState<{ id: string; dealCount: number; deals: Array<{ id: string; title: string }> } | null>(null);
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
@@ -194,12 +194,12 @@ export const useContactsController = () => {
     setIsModalOpen(true);
   };
 
-  const openEditCompanyModal = (company: Company) => {
+  const openEditCompanyModal = (company: CRMCompany) => {
     setEditingCompany(company);
     setIsCompanyModalOpen(true);
   };
 
-  const handleCompanySubmit = (data: { name: string; industry?: string; website?: string }) => {
+  const handleCompanySubmit = (data: { name: string; industry?: string; website?: string; cnpj?: string }) => {
     if (editingCompany) {
       updateCompanyMutation.mutate(
         { id: editingCompany.id, updates: { ...data } },
@@ -220,7 +220,7 @@ export const useContactsController = () => {
       (addToast || showToast)('Criando empresa...', 'info');
 
       createCompanyMutation.mutate(
-        { name: data.name, industry: data.industry || '', website: data.website || '' } as any,
+        { name: data.name, industry: data.industry || '', website: data.website || '', cnpj: data.cnpj || '' } as any,
         {
           onSuccess: () => {
             (addToast || showToast)('Empresa criada!', 'success');

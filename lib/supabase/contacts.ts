@@ -85,6 +85,8 @@ export interface DbCRMCompany {
   industry: string | null;
   /** Website da empresa. */
   website: string | null;
+  /** CNPJ da empresa (14 dígitos, somente números). */
+  cnpj: string | null;
   /** Data de criação. */
   created_at: string;
   /** Data de atualização. */
@@ -133,6 +135,7 @@ const transformCRMCompany = (db: DbCRMCompany): CRMCompany => ({
   name: db.name,
   industry: db.industry || undefined,
   website: db.website || undefined,
+  cnpj: db.cnpj || undefined,
   createdAt: db.created_at,
   updatedAt: db.updated_at,
 });
@@ -633,6 +636,7 @@ export const companiesService = {
         name: company.name,
         industry: sanitizeText(company.industry),
         website: sanitizeText(company.website),
+        cnpj: sanitizeText(company.cnpj?.replace(/\D/g, '')),
       };
 
       const { data, error } = await supabase
@@ -664,6 +668,7 @@ export const companiesService = {
       if (updates.name !== undefined) dbUpdates.name = updates.name;
       if (updates.industry !== undefined) dbUpdates.industry = updates.industry || null;
       if (updates.website !== undefined) dbUpdates.website = updates.website || null;
+      if (updates.cnpj !== undefined) dbUpdates.cnpj = updates.cnpj ? updates.cnpj.replace(/\D/g, '') : null;
       dbUpdates.updated_at = new Date().toISOString();
 
       const { error } = await supabase

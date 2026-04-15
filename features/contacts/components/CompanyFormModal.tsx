@@ -2,11 +2,12 @@ import React from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import type { Company } from '@/types';
+import type { CRMCompany } from '@/types';
 import { Modal, ModalForm } from '@/components/ui/Modal';
 import { InputField, SubmitButton } from '@/components/ui/FormField';
 import { companyFormSchema } from '@/lib/validations/schemas';
 import type { CompanyFormData } from '@/lib/validations/schemas';
+import { formatCNPJMask } from '@/lib/integrations/cnpj';
 
 type CompanyFormInput = z.input<typeof companyFormSchema>;
 
@@ -14,7 +15,7 @@ interface CompanyFormModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (data: CompanyFormData) => void;
-  editingCompany: Company | null;
+  editingCompany: CRMCompany | null;
 }
 
 /**
@@ -45,15 +46,20 @@ export const CompanyFormModal: React.FC<CompanyFormModalProps> = ({
       name: editingCompany?.name || '',
       industry: editingCompany?.industry || '',
       website: editingCompany?.website || '',
+      cnpj: formatCNPJMask(editingCompany?.cnpj || ''),
     },
   });
 
   const {
     register,
     handleSubmit,
+    setValue,
+    watch,
     formState: { errors, isSubmitting },
     reset,
   } = form;
+
+  const cnpjValue = watch('cnpj');
 
   React.useEffect(() => {
     if (isOpen) {
@@ -61,6 +67,7 @@ export const CompanyFormModal: React.FC<CompanyFormModalProps> = ({
         name: editingCompany?.name || '',
         industry: editingCompany?.industry || '',
         website: editingCompany?.website || '',
+        cnpj: formatCNPJMask(editingCompany?.cnpj || ''),
       });
     }
   }, [isOpen, editingCompany, reset]);
@@ -85,6 +92,17 @@ export const CompanyFormModal: React.FC<CompanyFormModalProps> = ({
           required
           error={errors.name}
           registration={register('name')}
+        />
+
+        <InputField
+          label="CNPJ"
+          placeholder="00.000.000/0000-00"
+          hint="Apenas dígitos; a formatação é aplicada automaticamente."
+          error={errors.cnpj}
+          value={cnpjValue ?? ''}
+          onChange={e => setValue('cnpj', formatCNPJMask(e.target.value), { shouldValidate: true })}
+          inputMode="numeric"
+          maxLength={18}
         />
 
         <InputField

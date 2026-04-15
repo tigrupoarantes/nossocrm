@@ -40,6 +40,7 @@ import { StageProgressBar } from '../StageProgressBar';
 import { ActivityRow } from '@/features/activities/components/ActivityRow';
 import { formatPriorityPtBr } from '@/lib/utils/priority';
 import { DealConversationsTab } from '@/features/conversations';
+import { formatCNPJMask } from '@/lib/integrations/cnpj';
 
 interface DealDetailModalProps {
   dealId: string | null;
@@ -598,6 +599,11 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                     <Building2 size={14} /> Empresa (Conta)
                   </h3>
                   <p className="text-slate-900 dark:text-white font-medium">{deal.companyName}</p>
+                  {deal.companyCnpj && (
+                    <p className="text-slate-500 text-xs mt-0.5 font-mono">
+                      CNPJ: {formatCNPJMask(deal.companyCnpj)}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <h3 className="text-xs font-bold text-slate-400 uppercase mb-2 flex items-center gap-2">
@@ -630,6 +636,11 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                           })()}
                       </p>
                       <p className="text-slate-500 text-xs">{deal.contactEmail}</p>
+                      {deal.contactPhone && (
+                        <p className="text-slate-500 text-xs flex items-center gap-1">
+                          <Phone size={10} aria-hidden="true" /> {deal.contactPhone}
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>
