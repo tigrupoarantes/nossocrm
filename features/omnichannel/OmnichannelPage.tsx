@@ -19,9 +19,11 @@ import {
 import { useBoards } from '@/lib/query/hooks/useBoardsQuery';
 import { ConversationThread } from '@/features/conversations/components/ConversationThread';
 import { ChannelIcon } from '@/features/conversations/components/ChannelBadge';
+import { MessageInput, type MessageSendPayload } from '@/features/conversations/components/MessageInput';
+import { useUploadConversationAttachment } from '@/features/conversations/hooks/useConversationAttachment';
 import { SendToBoardModal } from './components/SendToBoardModal';
 import { useSendConversationToBoard } from './hooks/useSendConversationToBoard';
-import type { Board } from '@/types';
+import type { Board, ConversationChannel } from '@/types';
 
 // =============================================================================
 // Helpers
@@ -352,20 +354,26 @@ function ConversationHeader({ conversation, currentUserId, onAssign, onClose, on
 interface ComposerProps {
   conversation: ConversationWithContact;
   currentUserId: string | undefined;
-  inputValue: string;
-  setInputValue: (v: string) => void;
-  onSend: () => void;
+  onSend: (payload: MessageSendPayload) => Promise<void>;
   isSending: boolean;
 }
 
+/**
+ * Wrapper que aplica as regras de negócio do omnichannel (conversa encerrada,
+ * bloqueada por outro atendente) e delega o input para o `MessageInput`
+ * compartilhado — que traz textarea com Shift+Enter, paperclip e gravação
+ * de áudio. Assim, card do deal, inbox e omnichannel compartilham o mesmo
+ * componente de composição.
+ */
 function ConversationComposer({
   conversation,
   currentUserId,
-  inputValue,
-  setInputValue,
   onSend,
   isSending,
 }: ComposerProps) {
+  const { organizationId } = useAuth();
+  const uploadMutation = useUploadConversationAttachment();
+
   const isMine = conversation.assigned_user_id === currentUserId;
   const isClosed = conversation.status === 'encerrado';
   const blockedByOther = !!conversation.assigned_user_id && !isMine;
@@ -392,31 +400,23 @@ function ConversationComposer({
     );
   }
 
+  const uploadAttachment = organizationId
+    ? async (file: File) => {
+        const r = await uploadMutation.mutateAsync({ organizationId, file });
+        return { url: r.url, mediaType: r.mediaType, filename: r.filename };
+      }
+    : undefined;
+
+  const channel = conversation.channel as ConversationChannel;
+
   return (
-    <div className="px-4 py-3 border-t border-slate-200 dark:border-white/10 bg-white dark:bg-dark-card flex gap-2">
-      <input
-        type="text"
-        value={inputValue}
-        onChange={(e) => setInputValue(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            onSend();
-          }
-        }}
-        placeholder="Digite uma mensagem..."
-        disabled={isSending}
-        className="flex-1 bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-lg px-4 py-2 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50"
-      />
-      <button
-        type="button"
-        onClick={onSend}
-        disabled={isSending || !inputValue.trim()}
-        className="px-4 py-2 bg-primary-500 text-white text-sm font-medium rounded-lg hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-      >
-        Enviar
-      </button>
-    </div>
+    <MessageInput
+      availableChannels={[channel]}
+      defaultChannel={channel}
+      isSending={isSending}
+      onSend={onSend}
+      uploadAttachment={uploadAttachment}
+    />
   );
 }
 
@@ -451,7 +451,6 @@ export function OmnichannelPage() {
   const [activeTab, setActiveTab] = useState<ConversationStatus | 'all'>('em_espera');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [inputValue, setInputValue] = useState('');
 
   // Lista completa (sem filtro de status no servidor) para calcular counts por tab
   const { data: allConversations = [], isLoading } = useConversations();
@@ -498,20 +497,20 @@ export function OmnichannelPage() {
 
   const handleSelect = (id: string) => {
     setSelectedId(id);
-    setInputValue('');
     markRead.mutate(id);
   };
 
-  const handleSend = async () => {
-    if (!selectedId || !inputValue.trim()) return;
-    const body = inputValue.trim();
-    setInputValue('');
-    try {
-      await sendMessage.mutateAsync({ conversationId: selectedId, body });
-    } catch (e) {
-      console.error('[Omnichannel] send failed', e);
-      setInputValue(body);
-    }
+  const handleSend = async (payload: MessageSendPayload) => {
+    if (!selectedId) return;
+    if (!payload.body.trim() && !payload.mediaUrl) return;
+    await sendMessage.mutateAsync({
+      conversationId: selectedId,
+      body: payload.body.trim(),
+      channel: payload.channel,
+      mediaUrl: payload.mediaUrl,
+      mediaType: payload.mediaType,
+      filename: payload.filename,
+    });
   };
 
   const isMutating = assign.isPending || closeConv.isPending || reopen.isPending;
@@ -569,8 +568,6 @@ export function OmnichannelPage() {
             <ConversationComposer
               conversation={selectedConversation}
               currentUserId={currentUserId}
-              inputValue={inputValue}
-              setInputValue={setInputValue}
               onSend={handleSend}
               isSending={sendMessage.isPending}
             />
