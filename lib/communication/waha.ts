@@ -147,6 +147,119 @@ export async function sendWahaMessage(params: SendWahaParams): Promise<WahaSendR
   return { id: messageId, timestamp: result.timestamp ?? Date.now() };
 }
 
+// =============================================================================
+// Envio de mídia (image, document, voice)
+// =============================================================================
+
+/**
+ * Parse genérico da resposta WAHA para qualquer endpoint de envio.
+ */
+async function parseWahaSendResponse(response: Response): Promise<WahaSendResult> {
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(
+      (error as Record<string, unknown>)?.message as string ?? `WAHA error: ${response.status}`,
+    );
+  }
+  const result = await response.json() as { id?: string; key?: { id: string }; timestamp?: number };
+  const messageId = result.id ?? result.key?.id ?? crypto.randomUUID();
+  return { id: messageId, timestamp: result.timestamp ?? Date.now() };
+}
+
+/**
+ * Envia imagem via WAHA /api/sendImage.
+ * A URL precisa ser PÚBLICA e acessível pelo WAHA server (bucket
+ * `conversation-attachments` é público, então atende).
+ */
+export async function sendWahaImage(params: {
+  to: string;
+  mediaUrl: string;
+  caption?: string;
+  wahaConfig: WahaConfig;
+}): Promise<WahaSendResult> {
+  const url = `${params.wahaConfig.baseUrl}/api/sendImage`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: wahaHeaders(params.wahaConfig),
+    body: JSON.stringify({
+      session: params.wahaConfig.sessionName,
+      chatId: toChatId(params.to),
+      file: { url: params.mediaUrl },
+      caption: params.caption ?? '',
+    }),
+  });
+  return parseWahaSendResponse(response);
+}
+
+/**
+ * Envia arquivo (documento PDF/DOCX/etc) via WAHA /api/sendFile.
+ */
+export async function sendWahaFile(params: {
+  to: string;
+  mediaUrl: string;
+  filename: string;
+  caption?: string;
+  wahaConfig: WahaConfig;
+}): Promise<WahaSendResult> {
+  const url = `${params.wahaConfig.baseUrl}/api/sendFile`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: wahaHeaders(params.wahaConfig),
+    body: JSON.stringify({
+      session: params.wahaConfig.sessionName,
+      chatId: toChatId(params.to),
+      file: { url: params.mediaUrl, filename: params.filename },
+      caption: params.caption ?? '',
+    }),
+  });
+  return parseWahaSendResponse(response);
+}
+
+/**
+ * Envia áudio como voice message via WAHA /api/sendVoice.
+ * Requer áudio OGG/Opus (padrão do WhatsApp) ou MP3.
+ */
+export async function sendWahaVoice(params: {
+  to: string;
+  mediaUrl: string;
+  wahaConfig: WahaConfig;
+}): Promise<WahaSendResult> {
+  const url = `${params.wahaConfig.baseUrl}/api/sendVoice`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: wahaHeaders(params.wahaConfig),
+    body: JSON.stringify({
+      session: params.wahaConfig.sessionName,
+      chatId: toChatId(params.to),
+      file: { url: params.mediaUrl },
+    }),
+  });
+  return parseWahaSendResponse(response);
+}
+
+/**
+ * Envia vídeo via WAHA /api/sendVideo.
+ */
+export async function sendWahaVideo(params: {
+  to: string;
+  mediaUrl: string;
+  caption?: string;
+  wahaConfig: WahaConfig;
+}): Promise<WahaSendResult> {
+  const url = `${params.wahaConfig.baseUrl}/api/sendVideo`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: wahaHeaders(params.wahaConfig),
+    body: JSON.stringify({
+      session: params.wahaConfig.sessionName,
+      chatId: toChatId(params.to),
+      file: { url: params.mediaUrl },
+      caption: params.caption ?? '',
+    }),
+  });
+  return parseWahaSendResponse(response);
+}
+
 /**
  * Envia WhatsApp de automação para o contato de um deal via WAHA.
  * Também persiste a mensagem outbound no banco.

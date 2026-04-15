@@ -17,15 +17,21 @@ import type { ConversationChannel } from '@/types';
 // Types
 // =============================================================================
 
+export type OutboundMediaType = 'image' | 'audio' | 'video' | 'document';
+
 export interface RouteMessageParams {
   /** ID da conversa no banco (para buscar canal, chat ID e config) */
   conversationId: string;
-  /** Texto da mensagem */
+  /** Texto da mensagem (ou caption quando houver mediaUrl) */
   body: string;
   /** Canal a usar — se omitido, usa o canal da conversa */
   channel?: ConversationChannel;
-  /** URL de mídia opcional (imagem, vídeo, etc.) */
+  /** URL pública da mídia (bucket `conversation-attachments`) */
   mediaUrl?: string;
+  /** Categoria da mídia — dirige o adapter a escolher o endpoint certo */
+  mediaType?: OutboundMediaType;
+  /** Nome original do arquivo (usado em document) */
+  filename?: string;
   /** ID de mensagem à qual esta é uma resposta */
   replyToId?: string;
 }
@@ -87,8 +93,45 @@ export async function routeAndSendMessage(
         | { baseUrl: string; apiKey: string; sessionName: string }
         | null;
 
+      const hasMedia = !!(params.mediaUrl && params.mediaType);
+
       // Prioridade: Meta Cloud API > WAHA
       if (metaConfig?.phoneNumberId && metaConfig?.accessToken) {
+        if (hasMedia) {
+          const meta = await import('./meta-whatsapp');
+          let result: { success: boolean; messageId?: string; error?: string };
+          switch (params.mediaType) {
+            case 'image':
+              result = await meta.sendMetaImage(metaConfig, phoneDigits, params.mediaUrl!, params.body || undefined);
+              break;
+            case 'document':
+              result = await meta.sendMetaDocument(
+                metaConfig,
+                phoneDigits,
+                params.mediaUrl!,
+                params.filename ?? 'documento',
+                params.body || undefined,
+              );
+              break;
+            case 'audio':
+              result = await meta.sendMetaAudio(metaConfig, phoneDigits, params.mediaUrl!);
+              break;
+            case 'video':
+              result = await meta.sendMetaVideo(metaConfig, phoneDigits, params.mediaUrl!, params.body || undefined);
+              break;
+            default:
+              throw new Error(`Unsupported mediaType: ${params.mediaType}`);
+          }
+          if (!result.success) {
+            throw new Error(result.error ?? 'Meta media send failed');
+          }
+          return {
+            ok: true,
+            externalMessageId: result.messageId ?? `meta-${Date.now()}`,
+            channel: 'whatsapp',
+          };
+        }
+
         const { sendMetaMessage } = await import('./meta-whatsapp');
         const result = await sendMetaMessage(metaConfig, phoneDigits, params.body);
 
@@ -104,6 +147,52 @@ export async function routeAndSendMessage(
       }
 
       if (wahaConfig?.baseUrl) {
+        if (hasMedia) {
+          const waha = await import('./waha');
+          let result: { id: string; timestamp: number };
+          switch (params.mediaType) {
+            case 'image':
+              result = await waha.sendWahaImage({
+                to: phone,
+                mediaUrl: params.mediaUrl!,
+                caption: params.body || undefined,
+                wahaConfig,
+              });
+              break;
+            case 'document':
+              result = await waha.sendWahaFile({
+                to: phone,
+                mediaUrl: params.mediaUrl!,
+                filename: params.filename ?? 'documento',
+                caption: params.body || undefined,
+                wahaConfig,
+              });
+              break;
+            case 'audio':
+              result = await waha.sendWahaVoice({
+                to: phone,
+                mediaUrl: params.mediaUrl!,
+                wahaConfig,
+              });
+              break;
+            case 'video':
+              result = await waha.sendWahaVideo({
+                to: phone,
+                mediaUrl: params.mediaUrl!,
+                caption: params.body || undefined,
+                wahaConfig,
+              });
+              break;
+            default:
+              throw new Error(`Unsupported mediaType: ${params.mediaType}`);
+          }
+          return {
+            ok: true,
+            externalMessageId: result.id,
+            channel: 'whatsapp',
+          };
+        }
+
         const { sendWahaMessage } = await import('./waha');
         const result = await sendWahaMessage({ to: phone, body: params.body, wahaConfig });
 

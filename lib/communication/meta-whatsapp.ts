@@ -132,6 +132,112 @@ export async function sendMetaMessage(
 }
 
 // =============================================================================
+// Envio de mídia (image, document, audio, video)
+// =============================================================================
+
+type MetaMediaType = 'image' | 'document' | 'audio' | 'video';
+
+interface MetaMediaPayload {
+  link: string;
+  caption?: string;
+  filename?: string;
+}
+
+async function sendMetaMedia(
+  config: MetaWhatsAppConfig,
+  to: string,
+  mediaType: MetaMediaType,
+  payload: MetaMediaPayload,
+): Promise<MetaSendResult> {
+  try {
+    const phone = normalizeMetaPhone(to);
+
+    const mediaObj: Record<string, string> = { link: payload.link };
+    // caption só é aceito para image/video/document; audio não aceita
+    if (payload.caption && mediaType !== 'audio') {
+      mediaObj.caption = payload.caption;
+    }
+    if (payload.filename && mediaType === 'document') {
+      mediaObj.filename = payload.filename;
+    }
+
+    const res = await fetch(`${META_GRAPH_URL}/${config.phoneNumberId}/messages`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${config.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to: phone,
+        type: mediaType,
+        [mediaType]: mediaObj,
+      }),
+    });
+
+    const data = await res.json() as {
+      messages?: Array<{ id: string }>;
+      error?: { message: string; code: number };
+    };
+
+    if (!res.ok || data.error) {
+      return {
+        success: false,
+        error: data.error?.message ?? `Meta API error: ${res.status}`,
+      };
+    }
+
+    return { success: true, messageId: data.messages?.[0]?.id };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+/** Envia imagem via Meta Cloud API. A URL precisa ser pública (Meta baixa antes de enviar). */
+export async function sendMetaImage(
+  config: MetaWhatsAppConfig,
+  to: string,
+  mediaUrl: string,
+  caption?: string,
+): Promise<MetaSendResult> {
+  return sendMetaMedia(config, to, 'image', { link: mediaUrl, caption });
+}
+
+/** Envia documento (PDF/DOCX/etc) via Meta Cloud API. Filename é obrigatório para UX correta no WhatsApp do destinatário. */
+export async function sendMetaDocument(
+  config: MetaWhatsAppConfig,
+  to: string,
+  mediaUrl: string,
+  filename: string,
+  caption?: string,
+): Promise<MetaSendResult> {
+  return sendMetaMedia(config, to, 'document', { link: mediaUrl, filename, caption });
+}
+
+/** Envia áudio (voice note) via Meta Cloud API. Áudio OGG/Opus é o padrão WhatsApp. */
+export async function sendMetaAudio(
+  config: MetaWhatsAppConfig,
+  to: string,
+  mediaUrl: string,
+): Promise<MetaSendResult> {
+  return sendMetaMedia(config, to, 'audio', { link: mediaUrl });
+}
+
+/** Envia vídeo via Meta Cloud API. */
+export async function sendMetaVideo(
+  config: MetaWhatsAppConfig,
+  to: string,
+  mediaUrl: string,
+  caption?: string,
+): Promise<MetaSendResult> {
+  return sendMetaMedia(config, to, 'video', { link: mediaUrl, caption });
+}
+
+// =============================================================================
 // Envio de automação
 // =============================================================================
 

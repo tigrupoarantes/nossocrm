@@ -14,13 +14,25 @@ import { routeAndSendMessage } from '@/lib/communication/message-router';
 
 export const runtime = 'nodejs';
 
-const SendSchema = z.object({
-  conversationId: z.string().uuid(),
-  body: z.string().min(1).max(4096),
-  channel: z.enum(['whatsapp', 'instagram', 'facebook', 'email']).optional(),
-  mediaUrl: z.string().url().optional(),
-  replyToId: z.string().uuid().optional(),
-});
+const SendSchema = z
+  .object({
+    conversationId: z.string().uuid(),
+    // body pode ser vazio quando há mídia (ex: áudio sem caption)
+    body: z.string().max(4096).optional().default(''),
+    channel: z.enum(['whatsapp', 'instagram', 'facebook', 'email']).optional(),
+    mediaUrl: z.string().url().optional(),
+    mediaType: z.enum(['image', 'audio', 'video', 'document']).optional(),
+    filename: z.string().max(255).optional(),
+    replyToId: z.string().uuid().optional(),
+  })
+  .refine(
+    (v) => (v.body && v.body.length > 0) || !!v.mediaUrl,
+    { message: 'Mensagem precisa de body ou mediaUrl' },
+  )
+  .refine(
+    (v) => !v.mediaUrl || !!v.mediaType,
+    { message: 'mediaUrl requer mediaType' },
+  );
 
 export async function POST(req: Request) {
   const supabase = await createClient();
@@ -52,7 +64,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Validation error', details: parsed.error.flatten() }, { status: 422 });
   }
 
-  const { conversationId, body: messageBody, channel, replyToId } = parsed.data;
+  const { conversationId, body: messageBody, channel, mediaUrl, mediaType, filename, replyToId } = parsed.data;
 
   // Verificar que a conversa pertence à org do usuário
   const { data: conv } = await supabase
@@ -73,6 +85,9 @@ export async function POST(req: Request) {
       conversationId,
       body: messageBody,
       channel: channel as 'whatsapp' | 'instagram' | 'facebook' | undefined,
+      mediaUrl,
+      mediaType,
+      filename,
       replyToId,
     });
   } catch (err) {
@@ -80,7 +95,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: message }, { status: 422 });
   }
 
-  // Persistir mensagem no banco
+  // Persistir mensagem no banco (message_type reflete a mídia quando houver)
+  const persistedMessageType = mediaType
+    ? mediaType === 'document' ? 'file' : mediaType
+    : 'text';
+
   const { data: message, error: insertErr } = await supabase
     .from('messages')
     .insert({
@@ -90,10 +109,12 @@ export async function POST(req: Request) {
       channel: routeResult.channel,
       direction: 'outbound',
       body: messageBody,
+      media_url: mediaUrl ?? null,
       status: 'sent',
-      message_type: 'text',
+      message_type: persistedMessageType,
       reply_to_id: replyToId ?? null,
       sent_at: new Date().toISOString(),
+      metadata: filename ? { filename } : {},
     })
     .select()
     .single();

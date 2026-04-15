@@ -1,9 +1,24 @@
 'use client';
 
 import React from 'react';
-import { Check, CheckCheck, Clock, AlertCircle } from 'lucide-react';
+import { Check, CheckCheck, Clock, AlertCircle, FileText, Download } from 'lucide-react';
 import type { Message, MessageStatus } from '@/types';
 import { ChannelIcon } from './ChannelBadge';
+
+/** Extrai nome de arquivo amigável de URL ou metadata. */
+function extractFilename(message: Message): string {
+  const fromMeta = (message.metadata as Record<string, unknown> | null)?.filename;
+  if (typeof fromMeta === 'string' && fromMeta.length > 0) return fromMeta;
+  if (!message.mediaUrl) return 'arquivo';
+  try {
+    const url = new URL(message.mediaUrl);
+    const last = url.pathname.split('/').pop() || 'arquivo';
+    // path tem o formato "<orgId>/<timestamp>-<uuid>.ext" — remover prefixo timestamp
+    return decodeURIComponent(last.replace(/^\d+-/, ''));
+  } catch {
+    return 'arquivo';
+  }
+}
 
 interface MessageBubbleProps {
   message: Message;
@@ -63,17 +78,59 @@ export function MessageBubble({ message, showChannelBadge = true }: MessageBubbl
       >
         {/* Mídia */}
         {message.mediaUrl && message.messageType === 'image' && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={message.mediaUrl}
-            alt="Imagem"
-            loading="lazy"
-            decoding="async"
-            className="mb-2 rounded-lg max-w-full max-h-48 object-cover"
-          />
+          <a href={message.mediaUrl} target="_blank" rel="noopener noreferrer">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={message.mediaUrl}
+              alt="Imagem"
+              loading="lazy"
+              decoding="async"
+              className="mb-2 rounded-lg max-w-full max-h-48 object-cover cursor-zoom-in"
+            />
+          </a>
         )}
 
-        {/* Corpo da mensagem */}
+        {message.mediaUrl && message.messageType === 'audio' && (
+          <audio
+            controls
+            src={message.mediaUrl}
+            className="mb-1 w-full min-w-55 max-w-75"
+            preload="metadata"
+          >
+            Seu navegador não suporta áudio.
+          </audio>
+        )}
+
+        {message.mediaUrl && message.messageType === 'video' && (
+          <video
+            controls
+            src={message.mediaUrl}
+            className="mb-2 rounded-lg max-w-full max-h-64"
+            preload="metadata"
+          >
+            Seu navegador não suporta vídeo.
+          </video>
+        )}
+
+        {message.mediaUrl && (message.messageType === 'file' || (message.messageType as string) === 'document') && (
+          <a
+            href={message.mediaUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            download
+            className={`mb-1 flex items-center gap-2 rounded-lg p-2 transition-colors ${
+              isOutbound
+                ? 'bg-black/5 hover:bg-black/10 dark:bg-white/5 dark:hover:bg-white/10'
+                : 'bg-black/5 hover:bg-black/10 dark:bg-white/5 dark:hover:bg-white/10'
+            }`}
+          >
+            <FileText size={24} className="shrink-0 text-[#54656f] dark:text-[#aebac1]" />
+            <span className="text-xs truncate flex-1">{extractFilename(message)}</span>
+            <Download size={14} className="shrink-0 text-[#54656f] dark:text-[#aebac1]" />
+          </a>
+        )}
+
+        {/* Corpo da mensagem (caption em mídia, ou texto puro) */}
         {message.body && (
           <p className="whitespace-pre-wrap break-words">{message.body}</p>
         )}
