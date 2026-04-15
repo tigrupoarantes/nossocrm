@@ -129,6 +129,7 @@ async function executeAction(
             dealId: schedule.dealId,
             organizationId: schedule.organizationId,
             templateId,
+            bodyTemplate: actionConfig.body,
           });
           return { success: true, result };
         } else if (twilioConfig?.accountSid) {

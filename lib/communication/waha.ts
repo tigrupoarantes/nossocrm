@@ -52,6 +52,32 @@ export interface AutomationWahaParams {
   dealId: string;
   organizationId: string;
   templateId: string;
+  /**
+   * Texto livre da mensagem (preenchido via UI de regras de automação).
+   * Quando presente, substitui o template hardcoded e interpola variáveis
+   * `{{nome_contato}}`, `{{empresa_lead}}`, `{{cnpj}}`, `{{segmento}}`.
+   */
+  bodyTemplate?: string;
+}
+
+/**
+ * Interpola variáveis {{var}} no texto livre da regra usando dados do
+ * contato e do lead. Mantém vars não reconhecidas como literais.
+ */
+function interpolateBody(
+  template: string,
+  vars: {
+    contactName?: string | null;
+    leadCompanyName?: string | null;
+    leadCompanyCnpj?: string | null;
+    leadCompanyIndustry?: string | null;
+  }
+): string {
+  return template
+    .replace(/\{\{\s*nome_contato\s*\}\}/gi, vars.contactName || '')
+    .replace(/\{\{\s*empresa_lead\s*\}\}/gi, vars.leadCompanyName || '')
+    .replace(/\{\{\s*cnpj\s*\}\}/gi, vars.leadCompanyCnpj || '')
+    .replace(/\{\{\s*segmento\s*\}\}/gi, vars.leadCompanyIndustry || '');
 }
 
 // =============================================================================
@@ -129,16 +155,22 @@ export async function sendAutomationWaha(
   supabase: SupabaseClient,
   params: AutomationWahaParams
 ): Promise<Record<string, unknown>> {
-  // Buscar deal + contato
+  // Buscar deal + contato (inclui campos da empresa do lead para interpolação)
   const { data: deal } = await supabase
     .from('deals')
-    .select('id, title, contact_id, contacts(name, phone)')
+    .select('id, title, contact_id, contacts(name, phone, lead_company_name, lead_company_cnpj, lead_company_industry)')
     .eq('id', params.dealId)
     .single();
 
   if (!deal) throw new Error('Deal not found');
 
-  const contact = (deal as Record<string, unknown>).contacts as { name: string; phone: string } | null;
+  const contact = (deal as Record<string, unknown>).contacts as {
+    name: string;
+    phone: string;
+    lead_company_name?: string | null;
+    lead_company_cnpj?: string | null;
+    lead_company_industry?: string | null;
+  } | null;
   if (!contact?.phone) throw new Error('Contact has no phone number');
 
   // Buscar configuração WAHA da organização
@@ -151,9 +183,16 @@ export async function sendAutomationWaha(
   const wahaConfig = (settings as Record<string, unknown>)?.waha_config as WahaConfig | null;
   if (!wahaConfig?.baseUrl) throw new Error('WAHA not configured for this organization');
 
-  const body = renderTemplate(params.templateId, {
-    contactName: contact.name ?? 'Cliente',
-  });
+  const body = params.bodyTemplate
+    ? interpolateBody(params.bodyTemplate, {
+        contactName: contact.name ?? 'Cliente',
+        leadCompanyName: contact.lead_company_name,
+        leadCompanyCnpj: contact.lead_company_cnpj,
+        leadCompanyIndustry: contact.lead_company_industry,
+      })
+    : renderTemplate(params.templateId, {
+        contactName: contact.name ?? 'Cliente',
+      });
 
   const result = await sendWahaMessage({ to: contact.phone, body, wahaConfig });
 
