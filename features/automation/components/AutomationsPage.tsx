@@ -71,9 +71,9 @@ function useBoardStages() {
           setStages(data.map(s => ({
             id: s.id,
             name: s.name,
-            label: s.label,
+            label: s.label ?? undefined,
             boardId: s.boardId,
-            order: s.order,
+            order: s.order ?? undefined,
           })));
         }
       } finally {
