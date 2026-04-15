@@ -9,6 +9,8 @@ import { LeadsList } from './LeadsList'
 interface SearchResult {
   campaignId: string
   totalLeads: number
+  leadsWithPhone?: number
+  leadsWithoutPhone?: number
   leads: Array<{
     businessName: string
     phone: string | null
@@ -43,7 +45,18 @@ export function ProspectingSearch() {
     },
     onSuccess: (data) => {
       setResult(data)
-      addToast?.(`${data.totalLeads} leads encontrados!`, 'success')
+      const withPhone = data.leadsWithPhone ?? data.leads.filter((l) => l.phone).length
+      if (withPhone === 0 && data.totalLeads > 0) {
+        addToast?.(
+          `${data.totalLeads} leads encontrados, mas nenhum com telefone. Verifique se a Places API (Details) está habilitada no Google Cloud.`,
+          'warning'
+        )
+      } else {
+        addToast?.(
+          `${data.totalLeads} leads encontrados — ${withPhone} com telefone, ${data.totalLeads - withPhone} sem.`,
+          'success'
+        )
+      }
     },
     onError: (err: Error) => addToast?.(err.message, 'error'),
   })

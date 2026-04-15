@@ -95,17 +95,34 @@ export async function searchGooglePlaces(params: PlacesSearchParams): Promise<Pl
     })
   )
 
-  return enriched.map((e, i) =>
+  const final = enriched.map((e, i) =>
     e.status === 'fulfilled' ? e.value : results[i]
   )
+
+  const withPhone = final.filter((r) => r.phone).length
+  console.log(
+    `[GooglePlaces] query="${query}" results=${final.length} withPhone=${withPhone} withoutPhone=${final.length - withPhone}`
+  )
+
+  return final
 }
 
 /**
  * Busca detalhes de um lugar específico (para obter telefone).
+ *
+ * Observação: para este endpoint funcionar, a Places API precisa estar
+ * habilitada no Google Cloud Console e ter billing ativo. Erros comuns:
+ *   - REQUEST_DENIED: API não habilitada ou key restrita.
+ *   - OVER_QUERY_LIMIT: quota/billing.
+ *   - NOT_FOUND: place_id inválido.
+ * Logamos cada cenário para facilitar diagnóstico.
  */
 export async function getPlaceDetails(placeId: string): Promise<{ phone: string | null }> {
   const apiKey = process.env.GOOGLE_PLACES_API_KEY
-  if (!apiKey) return { phone: null }
+  if (!apiKey) {
+    console.warn('[GooglePlaces:Details] GOOGLE_PLACES_API_KEY ausente — retornando phone null')
+    return { phone: null }
+  }
 
   const url = new URL('https://maps.googleapis.com/maps/api/place/details/json')
   url.searchParams.set('place_id', placeId)
@@ -113,13 +130,27 @@ export async function getPlaceDetails(placeId: string): Promise<{ phone: string 
   url.searchParams.set('key', apiKey)
 
   const res = await fetch(url.toString())
-  if (!res.ok) return { phone: null }
+  if (!res.ok) {
+    console.warn(`[GooglePlaces:Details] HTTP ${res.status} para placeId=${placeId}`)
+    return { phone: null }
+  }
 
   const data = await res.json() as {
+    status?: string
+    error_message?: string
     result?: { international_phone_number?: string; formatted_phone_number?: string }
   }
 
-  return {
-    phone: data.result?.international_phone_number ?? data.result?.formatted_phone_number ?? null,
+  if (data.status && data.status !== 'OK') {
+    console.warn(
+      `[GooglePlaces:Details] status=${data.status} placeId=${placeId} message=${data.error_message ?? '(sem mensagem)'}`
+    )
+    return { phone: null }
   }
+
+  const phone = data.result?.international_phone_number ?? data.result?.formatted_phone_number ?? null
+  if (!phone) {
+    console.warn(`[GooglePlaces:Details] placeId=${placeId} retornou sem phone`)
+  }
+  return { phone }
 }

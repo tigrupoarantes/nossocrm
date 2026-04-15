@@ -77,9 +77,13 @@ export async function POST(req: Request) {
     .update({ total_leads: places.length, status: 'completed', updated_at: new Date().toISOString() })
     .eq('id', campaign.id)
 
+  const leadsWithPhone = places.filter((p) => p.phone).length
+
   return NextResponse.json({
     campaignId: campaign.id,
     totalLeads: places.length,
+    leadsWithPhone,
+    leadsWithoutPhone: places.length - leadsWithPhone,
     leads: places,
   })
 }
