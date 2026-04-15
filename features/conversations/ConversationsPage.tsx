@@ -2,10 +2,11 @@
 
 import React, { useState } from 'react'
 import { MessageSquare, Search, Filter, Plus } from 'lucide-react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/context/AuthContext'
 import { useRouter } from 'next/navigation'
+import { useRealtimeSync } from '@/lib/realtime/useRealtimeSync'
 import type { ConversationChannel } from '@/types'
 import { ChannelIcon } from './components/ChannelBadge'
 
@@ -84,6 +85,17 @@ export function ConversationsPage() {
   const [filter, setFilter] = useState<FilterType>('open')
   const [search, setSearch] = useState('')
 
+  // Realtime: invalida a lista quando chega nova mensagem/conversa. Cobre o
+  // caso do usuário estar com a tela aberta recebendo inbound ao vivo. A
+  // queryKey da lista é `['conversations-page', ...]` que não é prefixo do
+  // mapping default do hook — invalidamos explicitamente via callback.
+  const queryClient = useQueryClient()
+  useRealtimeSync(['messages', 'conversations'], {
+    onchange: () => {
+      queryClient.invalidateQueries({ queryKey: ['conversations-page'], exact: false })
+    },
+  })
+
   const { data: conversations = [], isLoading } = useQuery({
     queryKey: ['conversations-page', organizationId, filter],
     queryFn: async (): Promise<Conversation[]> => {
@@ -114,7 +126,8 @@ export function ConversationsPage() {
       })
     },
     enabled: !!organizationId,
-    refetchInterval: 10_000,
+    // Fallback polling 30s caso o Realtime caia; a UX principal é via WS.
+    refetchInterval: 30_000,
   })
 
   const filtered = conversations.filter((c) => {

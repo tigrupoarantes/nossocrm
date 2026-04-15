@@ -13,6 +13,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { queryKeys, DEALS_VIEW_KEY } from '@/lib/query/queryKeys';
+import { useAuth } from '@/context/AuthContext';
 import type { DealView } from '@/types';
 
 // Enable detailed Realtime logging in development or when DEBUG_REALTIME env var is set
@@ -89,6 +90,7 @@ export function useRealtimeSync(
 ) {
   const { enabled = true, debounceMs = 100, onchange } = options;
   const queryClient = useQueryClient();
+  const { organizationId } = useAuth();
   const channelRef = useRef<RealtimeChannel | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -108,6 +110,10 @@ export function useRealtimeSync(
 
   useEffect(() => {
     if (!enabled) return;
+    // CRÍTICO: Supabase Realtime 2.x exige filtro explícito por tenant
+    // para não receber eventos de outras orgs (RLS não cobre broadcasts).
+    // Se orgId ainda não chegou, aguarda a próxima render.
+    if (!organizationId) return;
 
     const sb = supabase;
     if (!sb) {
@@ -116,7 +122,7 @@ export function useRealtimeSync(
     }
 
     const tableList = Array.isArray(tables) ? tables : [tables];
-    const channelName = `realtime-sync-${tableList.join('-')}`;
+    const channelName = `realtime-sync-${organizationId}-${tableList.join('-')}`;
 
     // Cleanup existing channel if any
     if (channelRef.current) {
@@ -131,7 +137,7 @@ export function useRealtimeSync(
     // Note: Supabase Realtime handles reconnection automatically
     const channel = sb.channel(channelName);
 
-    // Subscribe to each table
+    // Subscribe to each table com filtro por organization_id.
     tableList.forEach(table => {
       channel.on(
         'postgres_changes',
@@ -139,6 +145,7 @@ export function useRealtimeSync(
           event: '*', // INSERT, UPDATE, DELETE
           schema: 'public',
           table,
+          filter: `organization_id=eq.${organizationId}`,
         },
         (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
           if (DEBUG_REALTIME) {
@@ -831,7 +838,7 @@ export function useRealtimeSync(
     };
     // Only re-run if enabled, tables, or debounceMs change
     // queryClient is stable, onchange is handled via ref
-  }, [enabled, JSON.stringify(tables), debounceMs]);
+  }, [enabled, JSON.stringify(tables), debounceMs, organizationId]);
 
   return {
     /** Manually trigger a sync */

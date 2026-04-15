@@ -2,10 +2,12 @@
 
 import React from 'react';
 import { MessageSquare } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useDealConversationsController } from '../hooks/useDealConversationsController';
 import { ConversationThread } from './ConversationThread';
 import { MessageInput } from './MessageInput';
 import { ChannelBadge } from './ChannelBadge';
+import { useRealtimeSync } from '@/lib/realtime/useRealtimeSync';
 import type { ConversationChannel } from '@/types';
 
 interface DealConversationsTabProps {
@@ -52,6 +54,16 @@ export function DealConversationsTab({ dealId }: DealConversationsTabProps) {
     handleSend,
     hasConversations,
   } = useDealConversationsController(dealId);
+
+  // Realtime: quando chega mensagem nova para qualquer conversa da org,
+  // invalida a query do deal (que inclui mensagens embutidas por conversa).
+  // Sem isso, inbound só aparece após polling/F5.
+  const queryClient = useQueryClient();
+  useRealtimeSync(['messages', 'conversations'], {
+    onchange: () => {
+      queryClient.invalidateQueries({ queryKey: ['conversations', 'deal', dealId], exact: false });
+    },
+  });
 
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden">

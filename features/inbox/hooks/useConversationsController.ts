@@ -61,6 +61,19 @@ export function useConversationsController() {
     setInputValue('');
   }, [selectedConversationId, inputValue, sendMessage]);
 
+  /**
+   * Alternativa quando o body vem direto do componente (ex: MessageInput
+   * compartilhado). Não depende do inputValue local.
+   */
+  const handleSendBody = useCallback(async (body: string) => {
+    const conversationId = selectedConversationId;
+    if (!conversationId || !body.trim()) return;
+    await sendMessage.mutateAsync({
+      conversationId,
+      body: body.trim(),
+    });
+  }, [selectedConversationId, sendMessage]);
+
   const selectedConversation = conversations.find(c => c.id === selectedConversationId) ?? null;
 
   return {
@@ -83,5 +96,6 @@ export function useConversationsController() {
     // Handlers
     handleSelectConversation,
     handleSendMessage,
+    handleSendBody,
   };
 }

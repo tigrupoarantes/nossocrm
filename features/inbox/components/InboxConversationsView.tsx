@@ -1,11 +1,15 @@
 'use client';
 
 import React, { useEffect, useRef } from 'react';
-import { MessageSquare, Send, Settings } from 'lucide-react';
+import { MessageSquare, Settings } from 'lucide-react';
 import Link from 'next/link';
+import { useQueryClient } from '@tanstack/react-query';
 import { useConversationsController } from '../hooks/useConversationsController';
+import { MessageBubble } from '@/features/conversations/components/MessageBubble';
+import { MessageInput } from '@/features/conversations/components/MessageInput';
+import { useRealtimeSync } from '@/lib/realtime/useRealtimeSync';
 import type { ConversationWithContact } from '@/lib/query/hooks/useConversationsQuery';
-import type { Message } from '@/types';
+import type { ConversationChannel } from '@/types';
 
 // =============================================================================
 // Sub-componentes
@@ -66,31 +70,6 @@ function ConversationItem({ conversation, isSelected, onClick }: ConversationIte
   );
 }
 
-interface MessageBubbleProps {
-  message: Message;
-}
-
-function MessageBubble({ message }: MessageBubbleProps) {
-  const isOutbound = message.direction === 'outbound';
-
-  return (
-    <div className={`flex ${isOutbound ? 'justify-end' : 'justify-start'} mb-2`}>
-      <div
-        className={`max-w-[70%] rounded-2xl px-4 py-2 text-sm ${
-          isOutbound
-            ? 'bg-green-500 text-white rounded-br-sm'
-            : 'bg-white dark:bg-dark-card text-slate-900 dark:text-white border border-slate-200 dark:border-white/10 rounded-bl-sm'
-        }`}
-      >
-        <p className="whitespace-pre-wrap break-words">{message.body}</p>
-        <p className={`text-xs mt-1 ${isOutbound ? 'text-green-100' : 'text-slate-400 dark:text-slate-500'}`}>
-          {formatTime(message.sentAt)}
-        </p>
-      </div>
-    </div>
-  );
-}
-
 // =============================================================================
 // Empty states
 // =============================================================================
@@ -141,8 +120,6 @@ export function InboxConversationsView() {
   const {
     selectedConversationId,
     selectedConversation,
-    inputValue,
-    setInputValue,
     conversations,
     messages,
     conversationsLoading,
@@ -150,7 +127,7 @@ export function InboxConversationsView() {
     isWahaConfigured,
     isSending,
     handleSelectConversation,
-    handleSendMessage,
+    handleSendBody,
   } = useConversationsController();
 
   // Auto-scroll para última mensagem
@@ -158,6 +135,16 @@ export function InboxConversationsView() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Realtime: o mapping padrão já cobre ['messages', conversationId] via
+  // setQueryData. Para a lista de conversas do controller, invalidamos
+  // explicitamente via callback.
+  const queryClient = useQueryClient();
+  useRealtimeSync(['messages', 'conversations'], {
+    onchange: () => {
+      queryClient.invalidateQueries({ queryKey: ['conversations'], exact: false });
+    },
+  });
 
   if (!isWahaConfigured) {
     return (
@@ -242,30 +229,16 @@ export function InboxConversationsView() {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Input de envio */}
-            <div className="px-4 py-3 border-t border-slate-200 dark:border-white/10 flex gap-2">
-              <input
-                type="text"
-                value={inputValue}
-                onChange={e => setInputValue(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    void handleSendMessage();
-                  }
-                }}
-                placeholder="Digite uma mensagem..."
-                className="flex-1 bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-              <button
-                onClick={() => void handleSendMessage()}
-                disabled={isSending || !inputValue.trim()}
-                className="shrink-0 w-10 h-10 flex items-center justify-center bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                aria-label="Enviar mensagem"
-              >
-                <Send size={18} />
-              </button>
-            </div>
+            {/* Input de envio (componente compartilhado: Shift+Enter = nova
+                linha, Enter = envia; receberá clip e mic na Parte B3). */}
+            <MessageInput
+              availableChannels={['whatsapp' as ConversationChannel]}
+              defaultChannel="whatsapp"
+              isSending={isSending}
+              onSend={async (body) => {
+                await handleSendBody(body);
+              }}
+            />
           </>
         )}
       </div>
