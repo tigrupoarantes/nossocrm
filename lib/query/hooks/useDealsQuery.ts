@@ -10,6 +10,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { queryKeys, DEALS_VIEW_KEY } from '../index';
 import { dealsService, contactsService, companiesService, boardStagesService } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '@/context/AuthContext';
 import type { Deal, DealView, DealItem } from '@/types';
 
@@ -202,6 +203,42 @@ export const useDealsByBoard = (boardId: string) => {
       const companyMap = new Map(companies.map(c => [c.id, c]));
       const stageMap = new Map(stages.map(s => [s.id, s.label || s.name]));
 
+      // Step 4: Buscar conversas + indicador de inbound para cada deal.
+      // Agregamos no cliente para evitar N+1 queries.
+      const dealIds = deals.map(d => d.id);
+      const unreadByDeal = new Map<string, number>();
+      const hasReplyByDeal = new Set<string>();
+
+      if (dealIds.length > 0 && supabase) {
+        const { data: convs } = await supabase
+          .from('conversations')
+          .select('id, deal_id, unread_count')
+          .in('deal_id', dealIds);
+
+        const convDealMap = new Map<string, string>();
+        for (const conv of convs ?? []) {
+          if (!conv.deal_id) continue;
+          convDealMap.set(conv.id, conv.deal_id);
+          const current = unreadByDeal.get(conv.deal_id) || 0;
+          unreadByDeal.set(conv.deal_id, current + (conv.unread_count || 0));
+        }
+
+        const convIds = Array.from(convDealMap.keys());
+        if (convIds.length > 0) {
+          const { data: inboundConvs } = await supabase
+            .from('messages')
+            .select('conversation_id')
+            .in('conversation_id', convIds)
+            .eq('direction', 'inbound')
+            .limit(2000);
+
+          for (const row of inboundConvs ?? []) {
+            const dealId = convDealMap.get(row.conversation_id as string);
+            if (dealId) hasReplyByDeal.add(dealId);
+          }
+        }
+      }
+
       // Enrich ALL deals (filtering happens in select)
       const enrichedDeals: DealView[] = deals.map(deal => {
         const contact = contactMap.get(deal.contactId);
@@ -216,6 +253,8 @@ export const useDealsByBoard = (boardId: string) => {
           leadCompanyCnpj: contact?.leadCompanyCnpj || '',
           leadCompanyIndustry: contact?.leadCompanyIndustry || '',
           stageLabel: stageMap.get(deal.status) || 'Estágio não identificado',
+          unreadInboundCount: unreadByDeal.get(deal.id) || 0,
+          hasAnyInboundReply: hasReplyByDeal.has(deal.id),
         };
       });
       return enrichedDeals;

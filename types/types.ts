@@ -263,6 +263,10 @@ export interface DealView extends Deal {
   leadCompanyIndustry?: string;
   /** Nome/label do estágio atual (resolvido a partir do status UUID) */
   stageLabel: string;
+  /** Soma de unread_count das conversas deste deal. 0 quando tudo lido. */
+  unreadInboundCount?: number;
+  /** True se o lead já respondeu ao menos uma vez (qualquer inbound registrado). */
+  hasAnyInboundReply?: boolean;
 
   // @deprecated - Use clientCompanyName instead
   companyName?: string;

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import Image from 'next/image';
 import { DealView } from '@/types';
-import { Briefcase, Building2, FileText, Hourglass, Mail, Phone, Trophy, User, XCircle } from 'lucide-react';
+import { Briefcase, Building2, FileText, Hourglass, Mail, MessageSquareText, Phone, Trophy, User, XCircle } from 'lucide-react';
 import { ActivityStatusIcon } from './ActivityStatusIcon';
 import { priorityAriaLabelPtBr } from '@/lib/utils/priority';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -215,6 +215,17 @@ const DealCardComponent: React.FC<DealCardProps> = ({
         </div>
       )}
 
+      {/* Dot vermelho: há mensagem inbound não lida */}
+      {(deal.unreadInboundCount ?? 0) > 0 && !isClosed && (
+        <div
+          className="absolute -top-1.5 -left-1.5 min-w-4 h-4 px-1 bg-red-500 text-white text-[9px] font-bold rounded-full shadow-sm z-10 flex items-center justify-center animate-pulse ring-2 ring-white dark:ring-slate-800"
+          aria-label={`${deal.unreadInboundCount} mensagens não lidas`}
+          title={`${deal.unreadInboundCount} não lida(s)`}
+        >
+          {deal.unreadInboundCount}
+        </div>
+      )}
+
       <div className="flex gap-1 mb-2 flex-wrap">
         {/* Won/Lost status badge */}
         {deal.isWon && (
@@ -249,6 +260,15 @@ const DealCardComponent: React.FC<DealCardProps> = ({
 
       <div className="flex justify-between items-center pt-2 border-t border-slate-100 dark:border-white/5">
         <div className="flex items-center gap-2">
+          {deal.hasAnyInboundReply && (
+            <span
+              className="text-green-600 dark:text-green-400"
+              aria-label="Lead já respondeu"
+              title="Lead já respondeu"
+            >
+              <MessageSquareText size={12} aria-hidden="true" />
+            </span>
+          )}
           {deal.owner && deal.owner.name !== 'Sem Dono' && (
             deal.owner.avatar ? (
               <Image
