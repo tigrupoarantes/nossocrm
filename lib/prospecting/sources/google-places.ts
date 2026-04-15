@@ -69,6 +69,9 @@ export async function searchGooglePlaces(params: PlacesSearchParams): Promise<Pl
     for (const place of data.results ?? []) {
       results.push({
         businessName: place.name,
+        // Text Search raramente retorna telefone — enriquecemos com Place
+        // Details logo abaixo usando o `placeId`. Mantemos aqui o fallback
+        // caso algum provedor devolva direto.
         phone: place.international_phone_number ?? place.formatted_phone_number ?? null,
         address: place.formatted_address ?? null,
         rating: place.rating ?? null,
@@ -81,7 +84,20 @@ export async function searchGooglePlaces(params: PlacesSearchParams): Promise<Pl
     nextPageToken = data.next_page_token
   } while (nextPageToken && results.length < maxResults)
 
-  return results
+  // Enriquecimento: Text Search não traz telefone por padrão. Fazemos uma
+  // chamada Place Details por resultado em paralelo (Promise.allSettled
+  // tolera falhas individuais sem abortar a busca inteira).
+  const enriched = await Promise.allSettled(
+    results.map(async (r) => {
+      if (r.phone) return r
+      const details = await getPlaceDetails(r.placeId)
+      return { ...r, phone: details.phone }
+    })
+  )
+
+  return enriched.map((e, i) =>
+    e.status === 'fulfilled' ? e.value : results[i]
+  )
 }
 
 /**
