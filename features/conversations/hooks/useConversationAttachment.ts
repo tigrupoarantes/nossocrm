@@ -49,11 +49,21 @@ export interface UploadAttachmentResult {
   mimetype: string;
 }
 
+/**
+ * Extrai o MIME base, removendo parâmetros após `;` (ex: `audio/webm;codecs=opus`
+ * → `audio/webm`). O `MediaRecorder` anexa o codec, mas o bucket do Supabase
+ * e a lista `ALLOWED_MIME_TO_TYPE` só batem com o MIME base.
+ */
+function baseMimeOf(file: File): string {
+  return (file.type || '').split(';')[0].trim().toLowerCase();
+}
+
 export function validateAttachment(file: File): { ok: true; mediaType: AttachmentMediaType } | { ok: false; error: string } {
   if (file.size > MAX_ATTACHMENT_BYTES) {
     return { ok: false, error: 'Arquivo acima do limite de 5 MB.' };
   }
-  const mediaType = ALLOWED_MIME_TO_TYPE[file.type];
+  const baseMime = baseMimeOf(file);
+  const mediaType = ALLOWED_MIME_TO_TYPE[baseMime];
   if (!mediaType) {
     return { ok: false, error: `Tipo não suportado: ${file.type || 'desconhecido'}.` };
   }
@@ -78,10 +88,15 @@ async function uploadConversationAttachment(
   const filename = filenameHasExt ? baseName : `${baseName}.${ext}`;
   const path = `${params.organizationId}/${Date.now()}-${crypto.randomUUID()}-${filename}`;
 
+  // Supabase Storage faz match exato com allowed_mime_types do bucket. Se
+  // o File vier com `audio/webm;codecs=opus` (padrão do MediaRecorder), o
+  // upload é rejeitado silenciosamente. Enviamos sempre o MIME base.
+  const baseMime = baseMimeOf(params.file);
+
   const { error: uploadError } = await supabase.storage
     .from(BUCKET)
     .upload(path, params.file, {
-      contentType: params.file.type,
+      contentType: baseMime,
       upsert: false,
     });
 
@@ -96,7 +111,7 @@ async function uploadConversationAttachment(
     mediaType: validation.mediaType,
     filename,
     size: params.file.size,
-    mimetype: params.file.type,
+    mimetype: baseMime,
   };
 }
 

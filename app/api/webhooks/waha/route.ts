@@ -379,6 +379,8 @@ export async function POST(request: Request) {
   }
 
   const organizationId = resolved.organizationId;
+  const wahaApiKey = resolved.apiKey;
+  const wahaBaseUrl = resolved.baseUrl;
   result.organizationIds.push(organizationId);
 
   const normalizedPhone = normalizeWahaPhone(fromRaw);
@@ -390,22 +392,36 @@ export async function POST(request: Request) {
     : null;
 
   // Se a mensagem tem mídia, baixa e rehospeda no bucket conversation-attachments.
-  // Sem isso, a URL do WAHA pode expirar ou depender de rede interna do servidor.
+  // WAHA self-hosted serve o arquivo no próprio servidor e exige `x-api-key` —
+  // sem isso o fetch retorna 401/HTML e o arquivo no bucket fica inválido
+  // (imagem/audio aparecem quebrados no front).
   let messageType: 'text' | 'image' | 'audio' | 'video' | 'document' | 'file' = 'text';
   let mediaUrl: string | null = null;
   const sourceMediaUrl = payload?.media?.url || payload?.mediaUrl;
   if (payload?.hasMedia && sourceMediaUrl) {
+    // Só anexa x-api-key quando a URL é do próprio servidor WAHA — evita vazar
+    // a chave em redirects/CDNs externas (lookaside etc).
+    const isWahaInternalUrl = !!wahaBaseUrl && sourceMediaUrl.startsWith(wahaBaseUrl);
+    const rehostHeaders = isWahaInternalUrl && wahaApiKey
+      ? { 'x-api-key': wahaApiKey }
+      : undefined;
+
     const rehosted = await rehostInboundMedia(supabase, {
       sourceUrl: sourceMediaUrl,
       organizationId,
       mimetype: payload?.media?.mimetype,
       filenameHint: payload?.media?.filename ?? undefined,
+      headers: rehostHeaders,
     });
     if (rehosted) {
       mediaUrl = rehosted.publicUrl;
       messageType = rehosted.mediaType;
     } else {
-      console.warn('[WahaWebhook] rehost falhou — guardando URL original', { url: sourceMediaUrl.slice(0, 100) });
+      console.warn('[WahaWebhook] rehost falhou — guardando URL original', {
+        url: sourceMediaUrl.slice(0, 100),
+        hasApiKey: !!wahaApiKey,
+        isWahaInternalUrl,
+      });
       mediaUrl = sourceMediaUrl;
       messageType = payload?.media?.mimetype ? categorizeMime(payload.media.mimetype) : 'file';
     }
