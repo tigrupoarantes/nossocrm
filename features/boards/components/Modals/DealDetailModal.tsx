@@ -4,7 +4,9 @@ import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
 import ConfirmModal from '@/components/ConfirmModal';
 import { LossReasonModal } from '@/components/ui/LossReasonModal';
-import { useMoveDealSimple } from '@/lib/query/hooks';
+import { useMoveDealSimple, useUpdateContact } from '@/lib/query/hooks';
+import { queryKeys } from '@/lib/query/queryKeys';
+import { useQueryClient } from '@tanstack/react-query';
 import { FocusTrap, useFocusReturn } from '@/lib/a11y';
 import { Activity } from '@/types';
 import { usePersistedState } from '@/hooks/usePersistedState';
@@ -109,6 +111,13 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
   const [editTitle, setEditTitle] = useState('');
   const [editValue, setEditValue] = useState('');
 
+  // Lead company (dados da empresa do prospect, editáveis inline)
+  const [leadCompanyName, setLeadCompanyName] = useState('');
+  const [leadCompanyCnpj, setLeadCompanyCnpj] = useState('');
+  const [leadCompanyIndustry, setLeadCompanyIndustry] = useState('');
+  const updateContactMutation = useUpdateContact();
+  const queryClient = useQueryClient();
+
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isDrafting, setIsDrafting] = useState(false);
   const [aiResult, setAiResult] = useState<{ suggestion: string; score: number } | null>(null);
@@ -143,6 +152,30 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
 
   // Helper functions removed as they are now handled by ActivityRow component
 
+  // Salva dados da empresa-do-lead no contato quando o usuário sai do input.
+  // Dispara apenas se o valor mudou em relação ao que está no contato.
+  const saveLeadCompanyField = (
+    field: 'leadCompanyName' | 'leadCompanyCnpj' | 'leadCompanyIndustry',
+    value: string
+  ) => {
+    if (!contact) return;
+    const currentValue = contact[field] || '';
+    if (currentValue === value) return;
+
+    updateContactMutation.mutate(
+      { id: contact.id, updates: { [field]: value } },
+      {
+        onSuccess: () => {
+          // Força refetch do cache do Kanban/DealView para o tooltip refletir.
+          queryClient.invalidateQueries({ queryKey: [...queryKeys.deals.lists(), 'view'] });
+        },
+        onError: (error: Error) => {
+          addToast(`Erro ao salvar: ${error.message}`, 'error');
+        },
+      }
+    );
+  };
+
   // Reset state when deal changes or modal opens
   useEffect(() => {
     if (isOpen && deal) {
@@ -159,6 +192,9 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
       setPendingLostStageId(null);
       setLossReasonOrigin('button');
       setTagQuery('');
+      setLeadCompanyName(contact?.leadCompanyName || '');
+      setLeadCompanyCnpj(contact?.leadCompanyCnpj || '');
+      setLeadCompanyIndustry(contact?.leadCompanyIndustry || '');
     }
   }, [isOpen, dealId]); // Depend on dealId to reset when switching deals
 
@@ -601,26 +637,48 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                   <p className="text-slate-900 dark:text-white font-medium">{deal.companyName}</p>
                 </div>
 
-                {(deal.leadCompanyName || deal.leadCompanyCnpj || deal.leadCompanyIndustry) && (
+                {contact && (
                   <div className="pt-4 border-t border-slate-100 dark:border-white/5">
                     <h3 className="text-xs font-bold text-slate-400 uppercase mb-2 flex items-center gap-2">
                       <Building2 size={14} /> Empresa do Lead
                     </h3>
-                    {deal.leadCompanyName && (
-                      <p className="text-slate-900 dark:text-white font-medium text-sm">
-                        {deal.leadCompanyName}
-                      </p>
-                    )}
-                    {deal.leadCompanyCnpj && (
-                      <p className="text-slate-500 text-xs mt-0.5 font-mono">
-                        CNPJ: {formatCNPJMask(deal.leadCompanyCnpj)}
-                      </p>
-                    )}
-                    {deal.leadCompanyIndustry && (
-                      <p className="text-slate-500 text-xs mt-0.5">
-                        Segmento: {deal.leadCompanyIndustry}
-                      </p>
-                    )}
+                    <div className="space-y-2">
+                      <div>
+                        <label className="block text-[10px] text-slate-500 mb-0.5">Nome Fantasia</label>
+                        <input
+                          type="text"
+                          className="w-full bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-slate-700 rounded-md px-2 py-1.5 text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500"
+                          placeholder="Nome fantasia"
+                          value={leadCompanyName}
+                          onChange={e => setLeadCompanyName(e.target.value)}
+                          onBlur={() => saveLeadCompanyField('leadCompanyName', leadCompanyName)}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-slate-500 mb-0.5">CNPJ</label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          maxLength={18}
+                          className="w-full bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-slate-700 rounded-md px-2 py-1.5 text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500 font-mono"
+                          placeholder="00.000.000/0000-00"
+                          value={formatCNPJMask(leadCompanyCnpj)}
+                          onChange={e => setLeadCompanyCnpj(e.target.value.replace(/\D/g, ''))}
+                          onBlur={() => saveLeadCompanyField('leadCompanyCnpj', leadCompanyCnpj)}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-slate-500 mb-0.5">Segmento</label>
+                        <input
+                          type="text"
+                          className="w-full bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-slate-700 rounded-md px-2 py-1.5 text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500"
+                          placeholder="Ex: Varejo, Indústria"
+                          value={leadCompanyIndustry}
+                          onChange={e => setLeadCompanyIndustry(e.target.value)}
+                          onBlur={() => saveLeadCompanyField('leadCompanyIndustry', leadCompanyIndustry)}
+                        />
+                      </div>
+                    </div>
                   </div>
                 )}
                 <div>
