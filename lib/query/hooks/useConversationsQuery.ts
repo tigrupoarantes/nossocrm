@@ -74,6 +74,8 @@ export interface SendMessageParams {
   body: string;
   channel?: ConversationChannel;
   mediaUrl?: string;
+  mediaType?: 'image' | 'audio' | 'video' | 'document';
+  filename?: string;
   replyToId?: string;
 }
 
@@ -165,6 +167,9 @@ export function useDealConversations(dealId: string | null) {
  */
 function createOptimisticMessage(params: SendMessageParams): Message {
   const now = new Date().toISOString();
+  const messageType = params.mediaType
+    ? params.mediaType === 'document' ? 'file' : params.mediaType
+    : 'text';
   return {
     id: `temp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     organizationId: '',
@@ -172,14 +177,14 @@ function createOptimisticMessage(params: SendMessageParams): Message {
     waMessageId: null,
     externalMessageId: null,
     channel: params.channel ?? 'whatsapp',
-    messageType: 'text',
+    messageType,
     direction: 'outbound',
     body: params.body,
     mediaUrl: params.mediaUrl ?? null,
     status: 'sending',
     sentAt: now,
     createdAt: now,
-    metadata: {},
+    metadata: params.filename ? { filename: params.filename } : {},
   };
 }
 
@@ -204,6 +209,8 @@ export function useSendMessage() {
           body: params.body,
           channel: params.channel,
           mediaUrl: params.mediaUrl,
+          mediaType: params.mediaType,
+          filename: params.filename,
           replyToId: params.replyToId,
         }),
       });

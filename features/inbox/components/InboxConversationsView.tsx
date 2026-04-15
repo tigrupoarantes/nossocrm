@@ -8,6 +8,8 @@ import { useConversationsController } from '../hooks/useConversationsController'
 import { MessageBubble } from '@/features/conversations/components/MessageBubble';
 import { MessageInput } from '@/features/conversations/components/MessageInput';
 import { useRealtimeSync } from '@/lib/realtime/useRealtimeSync';
+import { useAuth } from '@/context/AuthContext';
+import { useUploadConversationAttachment } from '@/features/conversations/hooks/useConversationAttachment';
 import type { ConversationWithContact } from '@/lib/query/hooks/useConversationsQuery';
 import type { ConversationChannel } from '@/types';
 
@@ -146,6 +148,16 @@ export function InboxConversationsView() {
     },
   });
 
+  // Upload de anexos — habilita paperclip e mic no MessageInput
+  const { organizationId } = useAuth();
+  const uploadMutation = useUploadConversationAttachment();
+  const uploadAttachment = organizationId
+    ? async (file: File) => {
+        const r = await uploadMutation.mutateAsync({ organizationId, file });
+        return { url: r.url, mediaType: r.mediaType, filename: r.filename };
+      }
+    : undefined;
+
   if (!isWahaConfigured) {
     return (
       <div className="h-[600px] rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden">
@@ -229,15 +241,14 @@ export function InboxConversationsView() {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Input de envio (componente compartilhado: Shift+Enter = nova
-                linha, Enter = envia; receberá clip e mic na Parte B3). */}
+            {/* Input compartilhado: Shift+Enter = nova linha, Enter = envia.
+                Paperclip + Mic habilitados via uploadAttachment. */}
             <MessageInput
               availableChannels={['whatsapp' as ConversationChannel]}
               defaultChannel="whatsapp"
               isSending={isSending}
-              onSend={async (body) => {
-                await handleSendBody(body);
-              }}
+              onSend={handleSendBody}
+              uploadAttachment={uploadAttachment}
             />
           </>
         )}

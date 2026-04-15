@@ -10,9 +10,10 @@ import { useQuery } from '@tanstack/react-query';
 import {
   useConversations,
   useMessages,
-  useSendWahaMessage,
+  useSendMessage,
   useMarkConversationRead,
 } from '@/lib/query/hooks/useConversationsQuery';
+import type { MessageSendPayload } from '@/features/conversations/components/MessageInput';
 
 interface CommunicationSettings {
   configured: { waha: boolean };
@@ -26,8 +27,9 @@ export function useConversationsController() {
   const { data: conversations = [], isLoading: conversationsLoading } = useConversations();
   const { data: messages = [], isLoading: messagesLoading } = useMessages(selectedConversationId);
 
-  // Mutations
-  const sendMessage = useSendWahaMessage();
+  // Mutations — useSendMessage usa o router omnichannel (/api/messages/send)
+  // e suporta mediaUrl/mediaType/filename, diferente do legado useSendWahaMessage.
+  const sendMessage = useSendMessage();
   const markRead = useMarkConversationRead();
 
   // Verificar se WAHA está configurado
@@ -62,17 +64,25 @@ export function useConversationsController() {
   }, [selectedConversationId, inputValue, sendMessage]);
 
   /**
-   * Alternativa quando o body vem direto do componente (ex: MessageInput
-   * compartilhado). Não depende do inputValue local.
+   * Envio via MessageInput compartilhado — aceita body, mídia (url + type + filename)
+   * e canal. Quando há mediaUrl o body funciona como caption.
    */
-  const handleSendBody = useCallback(async (body: string) => {
-    const conversationId = selectedConversationId;
-    if (!conversationId || !body.trim()) return;
-    await sendMessage.mutateAsync({
-      conversationId,
-      body: body.trim(),
-    });
-  }, [selectedConversationId, sendMessage]);
+  const handleSendBody = useCallback(
+    async (payload: MessageSendPayload) => {
+      const conversationId = selectedConversationId;
+      if (!conversationId) return;
+      if (!payload.body.trim() && !payload.mediaUrl) return;
+      await sendMessage.mutateAsync({
+        conversationId,
+        body: payload.body.trim(),
+        channel: payload.channel,
+        mediaUrl: payload.mediaUrl,
+        mediaType: payload.mediaType,
+        filename: payload.filename,
+      });
+    },
+    [selectedConversationId, sendMessage],
+  );
 
   const selectedConversation = conversations.find(c => c.id === selectedConversationId) ?? null;
 

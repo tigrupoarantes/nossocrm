@@ -8,6 +8,8 @@ import { ConversationThread } from './ConversationThread';
 import { MessageInput } from './MessageInput';
 import { ChannelBadge } from './ChannelBadge';
 import { useRealtimeSync } from '@/lib/realtime/useRealtimeSync';
+import { useAuth } from '@/context/AuthContext';
+import { useUploadConversationAttachment } from '../hooks/useConversationAttachment';
 import type { ConversationChannel } from '@/types';
 
 interface DealConversationsTabProps {
@@ -65,6 +67,16 @@ export function DealConversationsTab({ dealId }: DealConversationsTabProps) {
     },
   });
 
+  // Upload de anexos (habilitado só se temos orgId)
+  const { organizationId } = useAuth();
+  const uploadMutation = useUploadConversationAttachment();
+  const uploadAttachment = organizationId
+    ? async (file: File) => {
+        const r = await uploadMutation.mutateAsync({ organizationId, file });
+        return { url: r.url, mediaType: r.mediaType, filename: r.filename };
+      }
+    : undefined;
+
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
       {/* Filtros por conversa/canal (quando há múltiplas conversas) */}
@@ -114,6 +126,7 @@ export function DealConversationsTab({ dealId }: DealConversationsTabProps) {
             availableChannels={availableChannels.length > 0 ? availableChannels : ['whatsapp']}
             defaultChannel={defaultChannel}
             isSending={isSending}
+            uploadAttachment={uploadAttachment}
           />
         </div>
       </div>

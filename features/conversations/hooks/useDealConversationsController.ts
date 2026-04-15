@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react';
 import { useDealConversations, useSendMessage, useInitiateConversation } from '@/lib/query/hooks/useConversationsQuery';
 import type { ConversationChannel, Message } from '@/types';
+import type { MessageSendPayload } from '../components/MessageInput';
 
 /**
  * Controller da aba "Conversas" no card do deal.
@@ -63,16 +64,17 @@ export function useDealConversationsController(dealId: string | null) {
     return conversations[0] ?? null;
   }, [selectedConversationId, conversations]);
 
-  const handleSend = async (body: string, channel: ConversationChannel) => {
+  const handleSend = async (payload: MessageSendPayload) => {
     if (!dealId) return;
+    const { body, channel, mediaUrl, mediaType, filename } = payload;
 
     if (!targetConversation) {
-      // Nenhuma conversa existente — iniciar nova (proactive outbound)
+      // Nenhuma conversa existente — iniciar nova (proactive outbound).
+      // Mídia em initiate ainda não é suportada; cai no texto puro.
       await initiateConversation.mutateAsync({ dealId, channel, body });
       return;
     }
 
-    // Encontrar conversa do canal selecionado (ou usar a primeira disponível)
     const conv =
       conversations.find(c => c.channel === channel) ??
       conversations.find(c => c.id === targetConversation.id) ??
@@ -82,6 +84,9 @@ export function useDealConversationsController(dealId: string | null) {
       conversationId: conv.id,
       body,
       channel,
+      mediaUrl,
+      mediaType,
+      filename,
     });
   };
 
