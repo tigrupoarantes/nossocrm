@@ -5,6 +5,7 @@ import { DebugFillButton } from '@/components/debug/DebugFillButton';
 import { fakeContact } from '@/lib/debug';
 import { FocusTrap, useFocusReturn } from '@/lib/a11y';
 import { useToast } from '@/context/ToastContext';
+import { formatCNPJMask } from '@/lib/integrations/cnpj';
 
 interface ContactFormData {
   name: string;
@@ -12,6 +13,9 @@ interface ContactFormData {
   phone: string;
   role: string;
   companyName: string;
+  leadCompanyName: string;
+  leadCompanyCnpj: string;
+  leadCompanyIndustry: string;
 }
 
 type RelationshipType = 'prospect' | 'customer' | 'inactive';
@@ -169,6 +173,9 @@ export const ContactFormModal: React.FC<ContactFormModalProps> = ({
       phone: fake.phone,
       role: fake.role,
       companyName: fake.companyName,
+      leadCompanyName: formData.leadCompanyName,
+      leadCompanyCnpj: formData.leadCompanyCnpj,
+      leadCompanyIndustry: formData.leadCompanyIndustry,
     });
   };
 
@@ -379,6 +386,54 @@ export const ContactFormModal: React.FC<ContactFormModalProps> = ({
                     ? 'Edite para alterar a empresa. Deixe em branco para desvincular.'
                     : 'Se a empresa já existir, o contato será vinculado a ela.'}
                 </p>
+              </div>
+
+              <div className="pt-3 border-t border-slate-200 dark:border-slate-700">
+                <p className="text-xs font-bold text-slate-500 uppercase mb-3">
+                  Empresa do Lead
+                </p>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
+                      Nome Fantasia
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500"
+                      placeholder="Nome fantasia do prospect"
+                      value={formData.leadCompanyName}
+                      onChange={e => setFormData({ ...formData, leadCompanyName: e.target.value })}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
+                        CNPJ
+                      </label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={18}
+                        className="w-full bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500 font-mono"
+                        placeholder="00.000.000/0000-00"
+                        value={formatCNPJMask(formData.leadCompanyCnpj)}
+                        onChange={e => setFormData({ ...formData, leadCompanyCnpj: e.target.value.replace(/\D/g, '') })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
+                        Segmento
+                      </label>
+                      <input
+                        type="text"
+                        className="w-full bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500"
+                        placeholder="Ex: Varejo, Indústria"
+                        value={formData.leadCompanyIndustry}
+                        onChange={e => setFormData({ ...formData, leadCompanyIndustry: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 

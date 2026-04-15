@@ -599,12 +599,30 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
                     <Building2 size={14} /> Empresa (Conta)
                   </h3>
                   <p className="text-slate-900 dark:text-white font-medium">{deal.companyName}</p>
-                  {deal.companyCnpj && (
-                    <p className="text-slate-500 text-xs mt-0.5 font-mono">
-                      CNPJ: {formatCNPJMask(deal.companyCnpj)}
-                    </p>
-                  )}
                 </div>
+
+                {(deal.leadCompanyName || deal.leadCompanyCnpj || deal.leadCompanyIndustry) && (
+                  <div className="pt-4 border-t border-slate-100 dark:border-white/5">
+                    <h3 className="text-xs font-bold text-slate-400 uppercase mb-2 flex items-center gap-2">
+                      <Building2 size={14} /> Empresa do Lead
+                    </h3>
+                    {deal.leadCompanyName && (
+                      <p className="text-slate-900 dark:text-white font-medium text-sm">
+                        {deal.leadCompanyName}
+                      </p>
+                    )}
+                    {deal.leadCompanyCnpj && (
+                      <p className="text-slate-500 text-xs mt-0.5 font-mono">
+                        CNPJ: {formatCNPJMask(deal.leadCompanyCnpj)}
+                      </p>
+                    )}
+                    {deal.leadCompanyIndustry && (
+                      <p className="text-slate-500 text-xs mt-0.5">
+                        Segmento: {deal.leadCompanyIndustry}
+                      </p>
+                    )}
+                  </div>
+                )}
                 <div>
                   <h3 className="text-xs font-bold text-slate-400 uppercase mb-2 flex items-center gap-2">
                     <User size={14} /> Contato Principal

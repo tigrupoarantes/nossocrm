@@ -161,6 +161,9 @@ export const useContactsController = () => {
     phone: '',
     role: '',
     companyName: '',
+    leadCompanyName: '',
+    leadCompanyCnpj: '',
+    leadCompanyIndustry: '',
   });
   const [isSubmittingContact, setIsSubmittingContact] = useState(false);
 
@@ -177,7 +180,16 @@ export const useContactsController = () => {
       return;
     }
     setEditingContact(null);
-    setFormData({ name: '', email: '', phone: '', role: '', companyName: '' });
+    setFormData({
+      name: '',
+      email: '',
+      phone: '',
+      role: '',
+      companyName: '',
+      leadCompanyName: '',
+      leadCompanyCnpj: '',
+      leadCompanyIndustry: '',
+    });
     setIsModalOpen(true);
   };
 
@@ -190,6 +202,9 @@ export const useContactsController = () => {
       phone: contact.phone,
       role: contact.role || '',
       companyName: company?.name || '',
+      leadCompanyName: contact.leadCompanyName || '',
+      leadCompanyCnpj: contact.leadCompanyCnpj || '',
+      leadCompanyIndustry: contact.leadCompanyIndustry || '',
     });
     setIsModalOpen(true);
   };
@@ -420,6 +435,9 @@ export const useContactsController = () => {
             phone: normalizedPhone,
             role: formData.role,
             companyId: companyId,
+            leadCompanyName: formData.leadCompanyName,
+            leadCompanyCnpj: formData.leadCompanyCnpj,
+            leadCompanyIndustry: formData.leadCompanyIndustry,
           },
         },
         {
@@ -438,6 +456,9 @@ export const useContactsController = () => {
           phone: normalizedPhone,
           role: formData.role,
           companyId: companyId || '',
+          leadCompanyName: formData.leadCompanyName,
+          leadCompanyCnpj: formData.leadCompanyCnpj,
+          leadCompanyIndustry: formData.leadCompanyIndustry,
           status: 'ACTIVE',
           stage: ContactStage.LEAD,
           totalValue: 0,

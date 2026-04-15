@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import Image from 'next/image';
 import { DealView } from '@/types';
-import { Building2, FileText, Hourglass, Mail, Phone, Trophy, User, XCircle } from 'lucide-react';
+import { Briefcase, Building2, FileText, Hourglass, Mail, Phone, Trophy, User, XCircle } from 'lucide-react';
 import { ActivityStatusIcon } from './ActivityStatusIcon';
 import { priorityAriaLabelPtBr } from '@/lib/utils/priority';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -153,9 +153,10 @@ const DealCardComponent: React.FC<DealCardProps> = ({
   };
 
   const hasLeadInfo = Boolean(
-    deal.contactName ||
-    deal.companyCnpj ||
-    deal.companyName ||
+    (deal.contactName && deal.contactName !== 'Sem contato') ||
+    deal.leadCompanyCnpj ||
+    deal.leadCompanyName ||
+    deal.leadCompanyIndustry ||
     deal.contactEmail ||
     deal.contactPhone
   );
@@ -303,16 +304,22 @@ const DealCardComponent: React.FC<DealCardProps> = ({
                 <span className="font-medium truncate">{deal.contactName}</span>
               </div>
             )}
-            {deal.companyCnpj && (
+            {deal.leadCompanyCnpj && (
               <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
                 <FileText size={12} aria-hidden="true" className="shrink-0 text-slate-400" />
-                <span className="font-mono truncate">{formatCNPJMask(deal.companyCnpj)}</span>
+                <span className="font-mono truncate">{formatCNPJMask(deal.leadCompanyCnpj)}</span>
               </div>
             )}
-            {deal.companyName && deal.companyName !== 'Sem empresa' && (
+            {deal.leadCompanyName && (
               <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
                 <Building2 size={12} aria-hidden="true" className="shrink-0 text-slate-400" />
-                <span className="truncate">{deal.companyName}</span>
+                <span className="truncate">{deal.leadCompanyName}</span>
+              </div>
+            )}
+            {deal.leadCompanyIndustry && (
+              <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
+                <Briefcase size={12} aria-hidden="true" className="shrink-0 text-slate-400" />
+                <span className="truncate">{deal.leadCompanyIndustry}</span>
               </div>
             )}
             {deal.contactEmail && (

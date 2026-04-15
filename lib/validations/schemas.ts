@@ -113,6 +113,17 @@ export const contactFormSchema = z.object({
   phone: phoneSchema,
   role: optionalString.pipe(z.string().max(MAX_LENGTHS.SHORT_TEXT)),
   companyName: optionalString.pipe(z.string().max(MAX_LENGTHS.COMPANY_NAME)),
+  leadCompanyName: optionalString.pipe(z.string().max(MAX_LENGTHS.COMPANY_NAME)),
+  leadCompanyCnpj: z
+    .string()
+    .optional()
+    .or(z.literal(''))
+    .transform(val => (val || '').replace(/\D/g, ''))
+    .refine(
+      val => val === '' || val.length === 14,
+      'CNPJ deve ter 14 dígitos'
+    ),
+  leadCompanyIndustry: optionalString.pipe(z.string().max(MAX_LENGTHS.SHORT_TEXT)),
 });
 
 export type ContactFormData = z.infer<typeof contactFormSchema>;

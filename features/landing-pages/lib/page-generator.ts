@@ -470,7 +470,10 @@ function buildFormFieldsHtml(fields: LandingPageField[]): string {
   if (fields.length === 0) {
     return `<input type="text" name="name" placeholder="Seu nome completo" required style="${FORM_INPUT_STYLE}" ${FORM_INPUT_FOCUS_ATTR} />
     <input type="email" name="email" placeholder="Seu e-mail" required style="${FORM_INPUT_STYLE}" ${FORM_INPUT_FOCUS_ATTR} />
-    <input type="tel" name="phone" placeholder="Seu telefone / WhatsApp" style="${FORM_INPUT_STYLE}" ${FORM_INPUT_FOCUS_ATTR} />`;
+    <input type="tel" name="phone" placeholder="Seu telefone / WhatsApp" required style="${FORM_INPUT_STYLE}" ${FORM_INPUT_FOCUS_ATTR} />
+    <input type="text" name="empresa" placeholder="Nome da empresa" style="${FORM_INPUT_STYLE}" ${FORM_INPUT_FOCUS_ATTR} />
+    <input type="text" name="cnpj" placeholder="CNPJ (somente números)" inputmode="numeric" maxlength="18" style="${FORM_INPUT_STYLE}" ${FORM_INPUT_FOCUS_ATTR} />
+    <input type="text" name="segmento" placeholder="Segmento / ramo de atuação" style="${FORM_INPUT_STYLE}" ${FORM_INPUT_FOCUS_ATTR} />`;
   }
 
   return fields.map(f => {

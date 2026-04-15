@@ -67,6 +67,12 @@ export interface DbContact {
   updated_at: string;
   /** ID do dono/responsável. */
   owner_id: string | null;
+  /** Nome fantasia da empresa do prospect. */
+  lead_company_name: string | null;
+  /** CNPJ da empresa do prospect (14 dígitos, somente números). */
+  lead_company_cnpj: string | null;
+  /** Segmento/indústria da empresa do prospect. */
+  lead_company_industry: string | null;
 }
 
 /**
@@ -121,6 +127,9 @@ const transformContact = (db: DbContact): Contact => ({
   totalValue: db.total_value || 0,
   createdAt: db.created_at,
   updatedAt: db.updated_at,
+  leadCompanyName: db.lead_company_name || undefined,
+  leadCompanyCnpj: db.lead_company_cnpj || undefined,
+  leadCompanyIndustry: db.lead_company_industry || undefined,
 });
 
 /**
@@ -168,6 +177,12 @@ const transformContactToDb = (contact: Partial<Contact>): Partial<DbContact> => 
   if (contact.lastInteraction !== undefined) db.last_interaction = contact.lastInteraction || null;
   if (contact.lastPurchaseDate !== undefined) db.last_purchase_date = contact.lastPurchaseDate || null;
   if (contact.totalValue !== undefined) db.total_value = contact.totalValue;
+  if (contact.leadCompanyName !== undefined) db.lead_company_name = contact.leadCompanyName || null;
+  if (contact.leadCompanyCnpj !== undefined) {
+    const digits = (contact.leadCompanyCnpj || '').replace(/\D/g, '');
+    db.lead_company_cnpj = digits || null;
+  }
+  if (contact.leadCompanyIndustry !== undefined) db.lead_company_industry = contact.leadCompanyIndustry || null;
 
   return db;
 };

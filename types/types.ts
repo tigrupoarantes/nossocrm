@@ -170,6 +170,13 @@ export interface Contact {
   createdAt: string;
   updatedAt?: string; // Última modificação do registro
 
+  // Dados da empresa do PROSPECT (capturados via LP ou cadastrados manualmente).
+  // Não confundir com clientCompanyId, que aponta para as empresas do próprio
+  // usuário em crm_companies.
+  leadCompanyName?: string;
+  leadCompanyCnpj?: string;
+  leadCompanyIndustry?: string;
+
   // @deprecated - Use clientCompanyId instead
   companyId?: string;
 }
@@ -250,7 +257,10 @@ export interface DealView extends Deal {
   contactName: string;
   contactEmail: string;
   contactPhone?: string;
-  companyCnpj?: string;
+  /** Dados da empresa do prospect (vindos do contato, não de crm_companies). */
+  leadCompanyName?: string;
+  leadCompanyCnpj?: string;
+  leadCompanyIndustry?: string;
   /** Nome/label do estágio atual (resolvido a partir do status UUID) */
   stageLabel: string;
 

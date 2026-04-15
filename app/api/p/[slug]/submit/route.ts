@@ -77,9 +77,17 @@ export async function POST(
   const email: string = formData.email || '';
   const phone: string = formData.phone || formData.telefone || formData.whatsapp || '';
 
+  // Dados da empresa do prospect (não de crm_companies — aqui guardamos no
+  // próprio contato). Aceitamos nomes reservados em PT/EN.
+  const leadCompanyName: string =
+    formData.empresa || formData.nome_fantasia || formData.company || '';
+  const leadCompanyCnpj: string = (formData.cnpj || '').replace(/\D/g, '');
+  const leadCompanyIndustry: string =
+    formData.segmento || formData.industry || formData.setor || '';
+
   console.log('[submit] LP found:', { id: lp.id, org: lp.organization_id, board: lp.target_board_id, stage: lp.target_stage_id });
   console.log('[submit] formData:', formData);
-  console.log('[submit] extracted:', { name, email, phone });
+  console.log('[submit] extracted:', { name, email, phone, leadCompanyName, leadCompanyCnpj, leadCompanyIndustry });
 
   // 4. Criar ou atualizar contato
   let contactId: string | null = null;
@@ -112,6 +120,32 @@ export async function POST(
     if (existingId) {
       contactId = existingId;
       console.log('[submit] contact found existing:', contactId);
+
+      // Só preenche campos de empresa-do-lead se estiverem vazios hoje (não
+      // sobrescreve edição manual do analista).
+      const { data: existingData } = await supabase
+        .from('contacts')
+        .select('lead_company_name, lead_company_cnpj, lead_company_industry')
+        .eq('id', existingId)
+        .single();
+
+      const patch: Record<string, string> = {};
+      if (leadCompanyName && !existingData?.lead_company_name) {
+        patch.lead_company_name = leadCompanyName;
+      }
+      if (leadCompanyCnpj && !existingData?.lead_company_cnpj) {
+        patch.lead_company_cnpj = leadCompanyCnpj;
+      }
+      if (leadCompanyIndustry && !existingData?.lead_company_industry) {
+        patch.lead_company_industry = leadCompanyIndustry;
+      }
+      if (Object.keys(patch).length > 0) {
+        const { error: patchError } = await supabase
+          .from('contacts')
+          .update(patch)
+          .eq('id', existingId);
+        if (patchError) console.error('[submit] contact patch error:', patchError.message);
+      }
     } else {
       const { data: newContact, error: contactError } = await supabase
         .from('contacts')
@@ -121,6 +155,9 @@ export async function POST(
           email: email || null,
           phone: phone ? phone.replace(/\D/g, '') : null,
           source: 'landing_page',
+          lead_company_name: leadCompanyName || null,
+          lead_company_cnpj: leadCompanyCnpj || null,
+          lead_company_industry: leadCompanyIndustry || null,
         })
         .select('id')
         .single();
