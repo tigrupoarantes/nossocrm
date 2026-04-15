@@ -7,6 +7,7 @@
 import { NextResponse } from 'next/server';
 import { createStaticAdminClient } from '@/lib/supabase/server';
 import { postProcessHtml } from '@/features/landing-pages/lib/html-postprocess';
+import { resolveSlugPlaceholder } from '@/features/landing-pages/lib/html-import';
 
 export async function GET(
   _req: Request,
@@ -34,8 +35,12 @@ export async function GET(
     .then(() => {});
 
   // Garante tokens/Tailwind/fonts/motion injetados — idempotente, serve também
-  // pra LPs antigas geradas antes do post-processador.
-  const html = postProcessHtml(lp.html_content ?? '');
+  // pra LPs antigas geradas antes do post-processador. Resolve placeholder
+  // de slug usado em LPs importadas (ex: Lovable).
+  const html = resolveSlugPlaceholder(
+    postProcessHtml(lp.html_content ?? ''),
+    slug
+  );
 
   // CSP relaxada apenas para landing pages públicas: a IA gera imagens de
   // CDNs variados (picsum, unsplash, placeholder, etc.) e a CSP global
