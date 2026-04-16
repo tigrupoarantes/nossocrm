@@ -45,14 +45,15 @@ function formatTime(dateStr: string): string {
  *   failed    → ⚠️ vermelho
  */
 function StatusIndicator({ status }: { status: MessageStatus }) {
-  // Cores oficiais WhatsApp Web: cinza #aebac1, azul read #53bdeb
+  // Cores oficiais WhatsApp Web: light mode #8696a0, dark mode #aebac1, azul read #53bdeb
+  const neutralClass = 'text-[#8696a0] dark:text-[#aebac1]';
   switch (status) {
     case 'sending':
-      return <Clock size={12} className="text-[#aebac1]" aria-label="Enviando" />;
+      return <Clock size={12} className={neutralClass} aria-label="Enviando" />;
     case 'sent':
-      return <Check size={14} className="text-[#aebac1]" aria-label="Enviada" />;
+      return <Check size={14} className={neutralClass} aria-label="Enviada" />;
     case 'delivered':
-      return <CheckCheck size={14} className="text-[#aebac1]" aria-label="Entregue" />;
+      return <CheckCheck size={14} className={neutralClass} aria-label="Entregue" />;
     case 'read':
       return <CheckCheck size={14} className="text-[#53bdeb]" aria-label="Lida" />;
     case 'failed':
