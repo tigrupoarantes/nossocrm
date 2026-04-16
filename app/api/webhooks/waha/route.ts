@@ -34,6 +34,7 @@ import { onResponseReceived } from '@/lib/automation/triggers';
 import { processWithSuperAgent } from '@/lib/ai/super-agent/engine';
 import { resolveWahaConfigBySession } from '@/lib/communication/meta-config-resolver';
 import { rehostInboundMedia, categorizeMime } from '@/lib/communication/media-rehost';
+import { normalizeWahaMessageId } from '@/lib/communication/waha';
 
 export const runtime = 'nodejs';
 
@@ -473,12 +474,40 @@ export async function POST(request: Request) {
 
     result.organizationIds.push(resolvedAck.organizationId);
 
-    const { data: current } = await supabase
-      .from('messages')
-      .select('id, status')
-      .eq('organization_id', resolvedAck.organizationId)
-      .eq('wa_message_id', ackMessageId)
-      .maybeSingle();
+    // GOWS envia ID no formato completo (`true_<chat>_<id>`); persistimos o
+    // formato curto. Buscamos pelos dois (raw + normalizado) e em ambas as
+    // colunas (external_message_id é o canônico para outbound; wa_message_id
+    // é mirror desde a correção do send route + usado por inbound).
+    const ackMessageIdShort = normalizeWahaMessageId(ackMessageId);
+    const idCandidates = ackMessageIdShort && ackMessageIdShort !== ackMessageId
+      ? [ackMessageIdShort, ackMessageId]
+      : [ackMessageId];
+
+    let current: { id: string; status: string } | null = null;
+    for (const candidate of idCandidates) {
+      const { data: byExt } = await supabase
+        .from('messages')
+        .select('id, status')
+        .eq('organization_id', resolvedAck.organizationId)
+        .eq('external_message_id', candidate)
+        .limit(1)
+        .maybeSingle();
+      if (byExt?.id) {
+        current = byExt as { id: string; status: string };
+        break;
+      }
+      const { data: byWa } = await supabase
+        .from('messages')
+        .select('id, status')
+        .eq('organization_id', resolvedAck.organizationId)
+        .eq('wa_message_id', candidate)
+        .limit(1)
+        .maybeSingle();
+      if (byWa?.id) {
+        current = byWa as { id: string; status: string };
+        break;
+      }
+    }
 
     if (!current?.id) {
       result.droppedReasons.push(`message_not_found:${ackMessageId}`);

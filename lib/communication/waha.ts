@@ -107,6 +107,23 @@ export function toChatId(phone: string): string {
   return `${toWhatsAppPhone(phone)}@c.us`;
 }
 
+/**
+ * Normaliza o ID de mensagem do WAHA. O webhook `message.ack` envia o ID no
+ * formato completo `<true|false>_<chatId>_<messageId>` (ex: `true_270205@lid_
+ * 3EB007...`), enquanto o `/api/sendText` retorna só o `<messageId>` curto.
+ * Persistimos sempre o formato curto para que `external_message_id` bata com
+ * o ID extraído do payload do ACK.
+ *
+ * Se a entrada já é id curto, retorna como veio.
+ */
+export function normalizeWahaMessageId(rawId: string): string {
+  if (!rawId) return '';
+  // Formato completo tem `@` (chatId embutido). Id curto não tem.
+  if (!rawId.includes('@')) return rawId;
+  const lastUnderscore = rawId.lastIndexOf('_');
+  return lastUnderscore >= 0 ? rawId.slice(lastUnderscore + 1) : rawId;
+}
+
 function wahaHeaders(config: WahaConfig): Record<string, string> {
   return {
     'Content-Type': 'application/json',
@@ -142,9 +159,10 @@ export async function sendWahaMessage(params: SendWahaParams): Promise<WahaSendR
   }
 
   const result = await response.json() as { id?: string; key?: { id: string }; timestamp?: number };
-  // WAHA pode retornar { id } ou { key: { id } } dependendo da versão
-  const messageId = result.id ?? result.key?.id ?? crypto.randomUUID();
-  return { id: messageId, timestamp: result.timestamp ?? Date.now() };
+  // WAHA pode retornar { id } ou { key: { id } } dependendo da versão.
+  // GOWS retorna formato completo `true_<chat>_<id>` — normalizamos para curto.
+  const rawId = result.id ?? result.key?.id ?? crypto.randomUUID();
+  return { id: normalizeWahaMessageId(rawId), timestamp: result.timestamp ?? Date.now() };
 }
 
 // =============================================================================
@@ -153,6 +171,7 @@ export async function sendWahaMessage(params: SendWahaParams): Promise<WahaSendR
 
 /**
  * Parse genérico da resposta WAHA para qualquer endpoint de envio.
+ * Normaliza o messageId para o formato curto (ver normalizeWahaMessageId).
  */
 async function parseWahaSendResponse(response: Response): Promise<WahaSendResult> {
   if (!response.ok) {
@@ -162,8 +181,8 @@ async function parseWahaSendResponse(response: Response): Promise<WahaSendResult
     );
   }
   const result = await response.json() as { id?: string; key?: { id: string }; timestamp?: number };
-  const messageId = result.id ?? result.key?.id ?? crypto.randomUUID();
-  return { id: messageId, timestamp: result.timestamp ?? Date.now() };
+  const rawId = result.id ?? result.key?.id ?? crypto.randomUUID();
+  return { id: normalizeWahaMessageId(rawId), timestamp: result.timestamp ?? Date.now() };
 }
 
 /**

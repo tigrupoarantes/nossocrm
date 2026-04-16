@@ -18,7 +18,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 interface FakeMessageRow {
   id: string
   organization_id: string
-  wa_message_id: string
+  wa_message_id?: string | null
+  external_message_id?: string | null
   status: string
 }
 
@@ -35,20 +36,24 @@ const dealsQueryMock = vi.fn(async () => ({ data: [], error: null }))
 const findExistingConvMock = vi.fn(async () => ({ data: null, error: null }))
 
 function buildMessagesQueryBuilder() {
-  // Cadeia: .from('messages').select(...).eq(...).eq(...).maybeSingle()
-  let filterOrgId = ''
-  let filterWaId = ''
+  // Cadeia: .from('messages').select(...).eq(col, val).eq(...).limit(1).maybeSingle()
+  // Mock genérico: acumula filtros .eq() em um dict e maybeSingle retorna o
+  // primeiro row da messagesStore que satisfaz TODOS os filtros.
+  const filters: Record<string, string> = {}
   return {
     select: vi.fn().mockReturnThis(),
     eq: vi.fn(function(this: unknown, col: string, value: string) {
-      if (col === 'organization_id') filterOrgId = value
-      if (col === 'wa_message_id') filterWaId = value
+      filters[col] = value
       return this
     }),
+    limit: vi.fn().mockReturnThis(),
     maybeSingle: vi.fn(async () => {
-      const found = messagesStore.find(
-        (m) => m.organization_id === filterOrgId && m.wa_message_id === filterWaId,
-      )
+      const found = messagesStore.find((m) => {
+        for (const [col, val] of Object.entries(filters)) {
+          if ((m as unknown as Record<string, unknown>)[col] !== val) return false
+        }
+        return true
+      })
       return { data: found ?? null, error: null }
     }),
     update: vi.fn((patch: { status: string }) => ({
@@ -391,8 +396,14 @@ describe('POST /api/webhooks/waha — message.ack', () => {
     })
   })
 
-  it('atualiza sent → delivered quando ack=DEVICE', async () => {
-    messagesStore.push({ id: 'msg-row-1', organization_id: 'org-1', wa_message_id: 'wamid-1', status: 'sent' })
+  it('acha mensagem outbound por external_message_id e atualiza para delivered', async () => {
+    messagesStore.push({
+      id: 'msg-row-1',
+      organization_id: 'org-1',
+      external_message_id: 'wamid-1',
+      wa_message_id: 'wamid-1',
+      status: 'sent',
+    })
     const { POST } = await import('@/app/api/webhooks/waha/route')
     const req = makeRequest({
       event: 'message.ack',
@@ -407,8 +418,41 @@ describe('POST /api/webhooks/waha — message.ack', () => {
     expect(messagesStore[0].status).toBe('delivered')
   })
 
+  it('acha mensagem por id curto quando ack vem em formato completo (GOWS)', async () => {
+    // Bug real do GOWS 2026.4.x: ack chega como "true_<chat>_<short>", mas
+    // mensagem outbound foi salva com id curto via parseWahaSendResponse.
+    messagesStore.push({
+      id: 'msg-row-gows',
+      organization_id: 'org-1',
+      external_message_id: '3EB0073F671CB947A57E8F',
+      wa_message_id: '3EB0073F671CB947A57E8F',
+      status: 'sent',
+    })
+    const { POST } = await import('@/app/api/webhooks/waha/route')
+    const req = makeRequest({
+      event: 'message.ack',
+      session: 'Whats_CRM',
+      payload: {
+        id: 'true_270205083242639@lid_3EB0073F671CB947A57E8F',
+        ackName: 'READ',
+        ack: 3,
+      },
+    })
+    const response = await POST(req)
+    const data = (await response.json()) as Record<string, unknown>
+    expect(response.status).toBe(200)
+    expect(data.status).toBe('read')
+    expect(messagesStore[0].status).toBe('read')
+  })
+
   it('atualiza delivered → read quando ack=READ', async () => {
-    messagesStore.push({ id: 'msg-row-2', organization_id: 'org-1', wa_message_id: 'wamid-2', status: 'delivered' })
+    messagesStore.push({
+      id: 'msg-row-2',
+      organization_id: 'org-1',
+      external_message_id: 'wamid-2',
+      wa_message_id: 'wamid-2',
+      status: 'delivered',
+    })
     const { POST } = await import('@/app/api/webhooks/waha/route')
     const req = makeRequest({
       event: 'message.ack',
@@ -420,7 +464,13 @@ describe('POST /api/webhooks/waha — message.ack', () => {
   })
 
   it('PLAYED também vira read (convergido)', async () => {
-    messagesStore.push({ id: 'msg-row-3', organization_id: 'org-1', wa_message_id: 'wamid-3', status: 'delivered' })
+    messagesStore.push({
+      id: 'msg-row-3',
+      organization_id: 'org-1',
+      external_message_id: 'wamid-3',
+      wa_message_id: 'wamid-3',
+      status: 'delivered',
+    })
     const { POST } = await import('@/app/api/webhooks/waha/route')
     await POST(
       makeRequest({
@@ -433,7 +483,13 @@ describe('POST /api/webhooks/waha — message.ack', () => {
   })
 
   it('ignora downgrade (ex: read → delivered)', async () => {
-    messagesStore.push({ id: 'msg-row-4', organization_id: 'org-1', wa_message_id: 'wamid-4', status: 'read' })
+    messagesStore.push({
+      id: 'msg-row-4',
+      organization_id: 'org-1',
+      external_message_id: 'wamid-4',
+      wa_message_id: 'wamid-4',
+      status: 'read',
+    })
     const { POST } = await import('@/app/api/webhooks/waha/route')
     const req = makeRequest({
       event: 'message.ack',
@@ -448,7 +504,13 @@ describe('POST /api/webhooks/waha — message.ack', () => {
   })
 
   it('failed sempre prevalece (ack=ERROR)', async () => {
-    messagesStore.push({ id: 'msg-row-5', organization_id: 'org-1', wa_message_id: 'wamid-5', status: 'read' })
+    messagesStore.push({
+      id: 'msg-row-5',
+      organization_id: 'org-1',
+      external_message_id: 'wamid-5',
+      wa_message_id: 'wamid-5',
+      status: 'read',
+    })
     const { POST } = await import('@/app/api/webhooks/waha/route')
     await POST(
       makeRequest({
@@ -489,7 +551,13 @@ describe('POST /api/webhooks/waha — message.ack', () => {
   })
 
   it('não dispara Super Agent nem onResponseReceived no caminho do ack', async () => {
-    messagesStore.push({ id: 'msg-row-6', organization_id: 'org-1', wa_message_id: 'wamid-6', status: 'sent' })
+    messagesStore.push({
+      id: 'msg-row-6',
+      organization_id: 'org-1',
+      external_message_id: 'wamid-6',
+      wa_message_id: 'wamid-6',
+      status: 'sent',
+    })
     const { POST } = await import('@/app/api/webhooks/waha/route')
     await POST(
       makeRequest({

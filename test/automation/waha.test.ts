@@ -45,6 +45,54 @@ describe('toChatId', () => {
 })
 
 // ---------------------------------------------------------------------------
+// normalizeWahaMessageId
+// ---------------------------------------------------------------------------
+
+describe('normalizeWahaMessageId', () => {
+  it('extrai id curto do formato completo true_<chat>_<id>', async () => {
+    const { normalizeWahaMessageId } = await import('@/lib/communication/waha')
+    expect(
+      normalizeWahaMessageId('true_270205083242639@lid_3EB0073F671CB947A57E8F'),
+    ).toBe('3EB0073F671CB947A57E8F')
+  })
+
+  it('extrai id curto do formato false_<chat>_<id> (inbound)', async () => {
+    const { normalizeWahaMessageId } = await import('@/lib/communication/waha')
+    expect(normalizeWahaMessageId('false_5511999@c.us_AAAA1234')).toBe('AAAA1234')
+  })
+
+  it('preserva id curto que já vem sem chat', async () => {
+    const { normalizeWahaMessageId } = await import('@/lib/communication/waha')
+    expect(normalizeWahaMessageId('3EB0073F671CB947A57E8F')).toBe('3EB0073F671CB947A57E8F')
+  })
+
+  it('retorna string vazia para input vazio', async () => {
+    const { normalizeWahaMessageId } = await import('@/lib/communication/waha')
+    expect(normalizeWahaMessageId('')).toBe('')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// sendWahaMessage normaliza id no retorno
+// ---------------------------------------------------------------------------
+
+describe('sendWahaMessage normaliza messageId retornado', () => {
+  it('normaliza id quando WAHA retorna formato completo', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        id: 'true_270205083242639@lid_3EB0073F671CB947A57E8F',
+        timestamp: 1710000000,
+      }),
+    })
+
+    const { sendWahaMessage } = await import('@/lib/communication/waha')
+    const result = await sendWahaMessage({ to: '+5511999990000', body: 'oi', wahaConfig })
+    expect(result.id).toBe('3EB0073F671CB947A57E8F')
+  })
+})
+
+// ---------------------------------------------------------------------------
 // sendWahaMessage
 // ---------------------------------------------------------------------------
 

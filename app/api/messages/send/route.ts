@@ -106,6 +106,10 @@ export async function POST(req: Request) {
       organization_id: profile.organization_id,
       conversation_id: conversationId,
       external_message_id: routeResult.externalMessageId,
+      // wa_message_id mirror do external_message_id — handler de message.ack
+      // do WAHA busca por ambas as colunas, e mensagens inbound persistem em
+      // wa_message_id também. Manter sincronizado evita lookup falhar.
+      wa_message_id: routeResult.externalMessageId,
       channel: routeResult.channel,
       direction: 'outbound',
       body: messageBody,
