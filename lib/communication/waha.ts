@@ -216,8 +216,13 @@ export async function sendWahaFile(params: {
 }
 
 /**
- * Envia áudio como voice message via WAHA /api/sendVoice.
- * Requer áudio OGG/Opus (padrão do WhatsApp) ou MP3.
+ * Envia áudio como voice message (PTT) via WAHA /api/sendVoice.
+ *
+ * WhatsApp aceita PTT APENAS em OGG/Opus. Como o navegador (Chrome/Firefox/
+ * Edge) grava em OGG nativo mas Safari grava em M4A, e uploads de arquivo
+ * podem chegar em qualquer formato, passamos `convert: true` para deixar o
+ * WAHA Plus converter via ffmpeg server-side. Isso evita que o WhatsApp do
+ * destinatário crashe ao abrir um WebM/M4A enviado como PTT.
  */
 export async function sendWahaVoice(params: {
   to: string;
@@ -232,6 +237,7 @@ export async function sendWahaVoice(params: {
       session: params.wahaConfig.sessionName,
       chatId: toChatId(params.to),
       file: { url: params.mediaUrl },
+      convert: true,
     }),
   });
   return parseWahaSendResponse(response);

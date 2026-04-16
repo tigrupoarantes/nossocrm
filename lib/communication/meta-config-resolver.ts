@@ -148,6 +148,10 @@ export interface ResolvedWahaConfig {
  * Resolve a organização dona desta sessão WAHA. O webhook do WAHA envia
  * `session: 'Whats_CRM'` no payload, e o `waha_config.sessionName` no
  * banco bate com isso.
+ *
+ * Usa índice expressional `(waha_config->>'sessionName')` criado em
+ * `20260416000000_waha_session_name_index.sql` — lookup O(log N) por webhook
+ * em vez de full scan + iteração em JS.
  */
 export async function resolveWahaConfigBySession(
   supabase: SupabaseClient,
@@ -156,18 +160,20 @@ export async function resolveWahaConfigBySession(
   if (!sessionName) return null
 
   // (A) organization_settings.waha_config
-  const { data: orgRows } = await supabase
+  const { data: orgRow } = await supabase
     .from('organization_settings')
     .select('organization_id, waha_config')
-    .not('waha_config', 'is', null)
+    .eq('waha_config->>sessionName', sessionName)
+    .limit(1)
+    .maybeSingle()
 
-  for (const row of (orgRows ?? []) as Array<Record<string, unknown>>) {
-    const cfg = row.waha_config as
+  if (orgRow) {
+    const cfg = (orgRow as Record<string, unknown>).waha_config as
       | { sessionName?: string; baseUrl?: string; apiKey?: string }
       | null
-    if (cfg?.sessionName === sessionName) {
+    if (cfg) {
       return {
-        organizationId: row.organization_id as string,
+        organizationId: (orgRow as Record<string, unknown>).organization_id as string,
         sessionName,
         baseUrl: cfg.baseUrl,
         apiKey: cfg.apiKey,
@@ -177,18 +183,21 @@ export async function resolveWahaConfigBySession(
   }
 
   // (B) business_unit_channel_settings (caso WAHA configurado por BU)
-  const { data: buRows } = await supabase
+  const { data: buRow } = await supabase
     .from('business_unit_channel_settings')
     .select('organization_id, business_unit_id, config')
     .eq('channel', 'whatsapp')
+    .eq('config->>sessionName', sessionName)
+    .limit(1)
+    .maybeSingle()
 
-  for (const row of (buRows ?? []) as Array<Record<string, unknown>>) {
-    const cfg = row.config as
+  if (buRow) {
+    const cfg = (buRow as Record<string, unknown>).config as
       | { sessionName?: string; baseUrl?: string; apiKey?: string }
       | null
-    if (cfg?.sessionName === sessionName) {
+    if (cfg) {
       return {
-        organizationId: row.organization_id as string,
+        organizationId: (buRow as Record<string, unknown>).organization_id as string,
         sessionName,
         baseUrl: cfg.baseUrl,
         apiKey: cfg.apiKey,

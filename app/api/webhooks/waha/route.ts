@@ -27,6 +27,7 @@
  * Segurança: header x-waha-secret validado com timingSafeEqual.
  */
 
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { createStaticAdminClient } from '@/lib/supabase/server';
 import { onResponseReceived } from '@/lib/automation/triggers';
@@ -108,6 +109,95 @@ export function extractRealPhone(payload: WahaWebhookPayload): string {
     return senderAlt;
   }
   return payload?.from ?? '';
+}
+
+/**
+ * Normaliza URL que pode vir sem scheme do payload WAHA. Algumas versões do
+ * WAHA mandam `media.url` sem `https://` (ex: `host.com/api/files/x.jpeg`).
+ * Sem isso, o browser do atendente interpreta como path relativo (→ 404 no
+ * localhost) e o fetch no server não resolve.
+ */
+export function normalizeSourceUrl(raw: string, wahaBaseUrl: string | null | undefined): string {
+  if (/^https?:\/\//i.test(raw)) return raw;
+  // Se a URL começa com "/", tenta resolver contra o wahaBaseUrl configurado.
+  if (raw.startsWith('/') && wahaBaseUrl) {
+    try {
+      return new URL(raw, wahaBaseUrl).toString();
+    } catch {
+      // cai no default abaixo
+    }
+  }
+  // Default: assume https://
+  return `https://${raw.replace(/^\/+/, '')}`;
+}
+
+/**
+ * Compara o host de duas URLs com tolerância a path/trailing-slash/scheme.
+ * Retorna false se qualquer URL for inválida ou base ausente.
+ */
+export function isSameHost(targetUrl: string, baseUrl: string | null | undefined): boolean {
+  if (!baseUrl) return false;
+  try {
+    return new URL(targetUrl).host === new URL(baseUrl).host;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Mapeia o `ackName` do payload `message.ack` do WAHA para o enum interno de
+ * `messages.status`. Convergimos READ e PLAYED em 'read' (UX igual WhatsApp Web).
+ * Retorna null se o ackName não é reconhecido (ack ignorado).
+ */
+export function mapWahaAckToStatus(ackName?: string): 'sent' | 'delivered' | 'read' | 'failed' | null {
+  switch ((ackName ?? '').toUpperCase()) {
+    case 'SERVER': return 'sent';
+    case 'DEVICE': return 'delivered';
+    case 'READ':
+    case 'PLAYED': return 'read';
+    case 'ERROR': return 'failed';
+    default: return null;
+  }
+}
+
+/**
+ * Ranking de status para evitar downgrade quando ACKs chegam fora de ordem
+ * (ex: READ antes de DEVICE). 'failed' ignora o ranking — sempre prevalece.
+ */
+const STATUS_RANK: Record<string, number> = {
+  sending: 0,
+  sent: 1,
+  delivered: 2,
+  read: 3,
+};
+
+/**
+ * Valida assinatura HMAC-SHA512 do raw body do webhook contra o segredo
+ * configurado em `WAHA_HMAC_SECRET`. WAHA Plus envia:
+ *   X-Webhook-Hmac: <hex>
+ *   X-Webhook-Hmac-Algorithm: sha512
+ *
+ * Retorna `true` se válido, `false` caso contrário. Comparação em tempo
+ * constante (`timingSafeEqual`) — defesa contra timing attacks.
+ */
+export function validateHmacSha512(
+  rawBody: string,
+  signatureHex: string | null,
+  algorithm: string | null,
+  secret: string | null | undefined,
+): boolean {
+  if (!secret || !signatureHex) return false;
+  if (algorithm && algorithm.toLowerCase() !== 'sha512') return false;
+
+  const expected = createHmac('sha512', secret).update(rawBody).digest();
+  let received: Buffer;
+  try {
+    received = Buffer.from(signatureHex, 'hex');
+  } catch {
+    return false;
+  }
+  if (received.length !== expected.length) return false;
+  return timingSafeEqual(expected, received);
 }
 
 /**
@@ -293,13 +383,33 @@ async function persistInboundMessage(
 // ---------------------------------------------------------------------------
 
 export async function POST(request: Request) {
-  // Validar segredo
-  const secret = request.headers.get('x-waha-secret');
-  if (!validateSecret(secret)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  // Ler RAW body antes do parse — HMAC é calculado sobre os bytes literais.
+  const rawBody = await request.text();
+
+  // Sequência de autenticação:
+  //  1. Se HMAC configurado E header presente → valida HMAC SHA-512 (forte).
+  //  2. Senão → cai para `x-waha-secret` simples (legado, dev-friendly).
+  const hmacSecret = process.env.WAHA_HMAC_SECRET ?? null;
+  const hmacHeader = request.headers.get('x-webhook-hmac');
+  const hmacAlgorithm = request.headers.get('x-webhook-hmac-algorithm');
+
+  if (hmacSecret && hmacHeader) {
+    if (!validateHmacSha512(rawBody, hmacHeader, hmacAlgorithm, hmacSecret)) {
+      return NextResponse.json({ error: 'Unauthorized (HMAC mismatch)' }, { status: 401 });
+    }
+  } else {
+    const secret = request.headers.get('x-waha-secret');
+    if (!validateSecret(secret)) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
   }
 
-  const webhookBody = await request.json().catch(() => ({})) as WahaWebhookBody;
+  let webhookBody: WahaWebhookBody;
+  try {
+    webhookBody = JSON.parse(rawBody) as WahaWebhookBody;
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+  }
   const supabase = createStaticAdminClient();
 
   // Acumulador para webhook_logs
@@ -339,8 +449,77 @@ export async function POST(request: Request) {
 
   const { event, payload, session } = webhookBody;
 
-  // Ignorar eventos que não são mensagens novas
-  if (event !== 'message') {
+  // Processar ACKs (delivered/read/played) — atualiza messages.status para que o
+  // bubble outbound mostre ✓✓ azul (igual WhatsApp Web).
+  if (event === 'message.ack') {
+    const ackPayload = (payload ?? {}) as Record<string, unknown>;
+    const ackMessageId = (ackPayload.id as string) || '';
+    const ackName = (ackPayload.ackName as string) || '';
+    const newStatus = mapWahaAckToStatus(ackName);
+
+    if (!ackMessageId || !newStatus) {
+      result.droppedReasons.push(`invalid_ack:${ackName || 'null'}`);
+      await writeLog(200, `ack ignored (id=${ackMessageId} ackName=${ackName})`);
+      return NextResponse.json({ ok: true, ignored: true, event, reason: 'invalid_ack' });
+    }
+
+    const resolvedAck = await resolveWahaConfigBySession(supabase, session ?? null);
+    if (!resolvedAck?.organizationId) {
+      result.inboundDropped += 1;
+      result.droppedReasons.push(`no_org_for_session:${session ?? 'null'}`);
+      await writeLog(200, `no org for ack session=${session}`);
+      return NextResponse.json({ ok: true, dropped: true, reason: 'no_org_for_session' });
+    }
+
+    result.organizationIds.push(resolvedAck.organizationId);
+
+    const { data: current } = await supabase
+      .from('messages')
+      .select('id, status')
+      .eq('organization_id', resolvedAck.organizationId)
+      .eq('wa_message_id', ackMessageId)
+      .maybeSingle();
+
+    if (!current?.id) {
+      result.droppedReasons.push(`message_not_found:${ackMessageId}`);
+      await writeLog(200, `message not found for ack: ${ackMessageId}`);
+      return NextResponse.json({ ok: true, dropped: true, reason: 'message_not_found' });
+    }
+
+    // ACKs podem chegar fora de ordem (READ antes de DEVICE). Só fazemos upgrade —
+    // 'failed' é exceção e sempre prevalece.
+    const currentStatus = (current.status as string) || 'sending';
+    const currentRank = STATUS_RANK[currentStatus] ?? 0;
+    const newRank = STATUS_RANK[newStatus] ?? 0;
+
+    if (newStatus !== 'failed' && newRank <= currentRank) {
+      result.droppedReasons.push(`no_upgrade:${currentStatus}->${newStatus}`);
+      await writeLog(200, `ack downgrade ignored (current=${currentStatus} new=${newStatus})`);
+      return NextResponse.json({ ok: true, ignored: true, reason: 'no_upgrade' });
+    }
+
+    const { error: updErr } = await supabase
+      .from('messages')
+      .update({ status: newStatus })
+      .eq('id', current.id as string);
+
+    if (updErr) {
+      result.errors.push(`ack update failed: ${updErr.message}`);
+      await writeLog(500, `ack update failed: ${updErr.message}`);
+      return NextResponse.json({ error: 'Failed to update status' }, { status: 500 });
+    }
+
+    result.inboundProcessed += 1;
+    await writeLog(200);
+    return NextResponse.json({ ok: true, messageId: current.id, status: newStatus });
+  }
+
+  // Aceitar tanto `message` quanto `message.any`. WAHA GOWS engine (>= 2026.4.x)
+  // emite mensagens inbound apenas como `message.any` (superset de `message`,
+  // payload idêntico). Filtragem de eco do próprio número fica por conta do
+  // guard `fromMe === true` logo abaixo. Dedup por (organization_id,
+  // wa_message_id) garante que se ambos os eventos chegarem, só persistimos um.
+  if (event !== 'message' && event !== 'message.any') {
     result.droppedReasons.push(`event_not_message:${event ?? 'null'}`);
     await writeLog(200, `event != message`);
     return NextResponse.json({ ok: true, ignored: true, event });
@@ -397,11 +576,17 @@ export async function POST(request: Request) {
   // (imagem/audio aparecem quebrados no front).
   let messageType: 'text' | 'image' | 'audio' | 'video' | 'document' | 'file' = 'text';
   let mediaUrl: string | null = null;
-  const sourceMediaUrl = payload?.media?.url || payload?.mediaUrl;
-  if (payload?.hasMedia && sourceMediaUrl) {
-    // Só anexa x-api-key quando a URL é do próprio servidor WAHA — evita vazar
-    // a chave em redirects/CDNs externas (lookaside etc).
-    const isWahaInternalUrl = !!wahaBaseUrl && sourceMediaUrl.startsWith(wahaBaseUrl);
+  const rawSourceMediaUrl = payload?.media?.url || payload?.mediaUrl;
+  if (payload?.hasMedia && rawSourceMediaUrl) {
+    // WAHA pode mandar URL sem scheme — normaliza ANTES de qualquer uso para
+    // evitar que o browser do atendente trate como path relativo (404 em dev)
+    // e que `new URL(...)` lance no isSameHost.
+    const sourceMediaUrl = normalizeSourceUrl(rawSourceMediaUrl, wahaBaseUrl);
+
+    // Só anexa x-api-key quando a URL aponta para o mesmo HOST do WAHA configurado
+    // — evita vazar a chave em redirects/CDNs externas (lookaside etc). Comparar
+    // por host (não `startsWith`) tolera diferenças de path/scheme/trailing-slash.
+    const isWahaInternalUrl = isSameHost(sourceMediaUrl, wahaBaseUrl);
     const rehostHeaders = isWahaInternalUrl && wahaApiKey
       ? { 'x-api-key': wahaApiKey }
       : undefined;
@@ -418,10 +603,14 @@ export async function POST(request: Request) {
       messageType = rehosted.mediaType;
     } else {
       console.warn('[WahaWebhook] rehost falhou — guardando URL original', {
-        url: sourceMediaUrl.slice(0, 100),
+        rawUrl: rawSourceMediaUrl.slice(0, 120),
+        normalizedUrl: sourceMediaUrl.slice(0, 120),
+        wahaBaseUrl: wahaBaseUrl ?? null,
         hasApiKey: !!wahaApiKey,
         isWahaInternalUrl,
+        mimetype: payload?.media?.mimetype ?? null,
       });
+      // Salva a URL JÁ normalizada (com scheme) — nunca a raw sem scheme.
       mediaUrl = sourceMediaUrl;
       messageType = payload?.media?.mimetype ? categorizeMime(payload.media.mimetype) : 'file';
     }

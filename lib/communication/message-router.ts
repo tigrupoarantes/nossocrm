@@ -169,6 +169,10 @@ export async function routeAndSendMessage(
               });
               break;
             case 'audio':
+              // sendWahaVoice usa `convert: true` (ffmpeg server-side no WAHA Plus),
+              // então qualquer formato vira OGG/Opus antes de virar PTT. Sem isso,
+              // áudios WebM/M4A enviados como voice fazem o WhatsApp do destinatário
+              // crashar tentando reproduzir.
               result = await waha.sendWahaVoice({
                 to: phone,
                 mediaUrl: params.mediaUrl!,
