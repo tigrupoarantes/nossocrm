@@ -118,6 +118,36 @@ describe('sendWahaMessage', () => {
 })
 
 // ---------------------------------------------------------------------------
+// sendWahaVoice
+// ---------------------------------------------------------------------------
+
+describe('sendWahaVoice', () => {
+  it('inclui convert:true no payload (delega conversão p/ OGG ao WAHA)', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ id: 'voice-1', timestamp: 1710000000 }),
+    })
+
+    const { sendWahaVoice } = await import('@/lib/communication/waha')
+    await sendWahaVoice({
+      to: '+5511999990000',
+      mediaUrl: 'https://bucket.example.com/audio.webm',
+      wahaConfig,
+    })
+
+
+    const [url, options] = (fetchMock.mock.calls as any[])[0] as [string, RequestInit]
+    expect(url).toBe('http://localhost:3000/api/sendVoice')
+
+    const body = JSON.parse(options.body as string) as Record<string, unknown>
+    expect(body.session).toBe('default')
+    expect(body.chatId).toBe('5511999990000@c.us')
+    expect(body.convert).toBe(true)
+    expect((body.file as Record<string, unknown>).url).toBe('https://bucket.example.com/audio.webm')
+  })
+})
+
+// ---------------------------------------------------------------------------
 // testWahaConnection
 // ---------------------------------------------------------------------------
 
