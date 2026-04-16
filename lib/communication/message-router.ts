@@ -155,6 +155,7 @@ export async function routeAndSendMessage(
               result = await waha.sendWahaImage({
                 to: phone,
                 mediaUrl: params.mediaUrl!,
+                filename: params.filename,
                 caption: params.body || undefined,
                 wahaConfig,
               });
@@ -176,6 +177,7 @@ export async function routeAndSendMessage(
               result = await waha.sendWahaVoice({
                 to: phone,
                 mediaUrl: params.mediaUrl!,
+                filename: params.filename,
                 wahaConfig,
               });
               break;
@@ -183,6 +185,7 @@ export async function routeAndSendMessage(
               result = await waha.sendWahaVideo({
                 to: phone,
                 mediaUrl: params.mediaUrl!,
+                filename: params.filename,
                 caption: params.body || undefined,
                 wahaConfig,
               });

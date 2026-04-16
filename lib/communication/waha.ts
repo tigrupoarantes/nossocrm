@@ -131,6 +131,50 @@ function wahaHeaders(config: WahaConfig): Record<string, string> {
   };
 }
 
+/**
+ * Deriva mimetype da extensão do filename (ou da URL como fallback).
+ * WAHA aceita `file: { url }` sem mimetype, mas o GOWS engine às vezes falha
+ * silenciosamente — devolve message_id sem entregar de fato. Sempre passar
+ * mimetype + filename garante que o WAHA monte o upload correto pro WhatsApp.
+ */
+const MIME_BY_EXT: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  pdf: 'application/pdf',
+  doc: 'application/msword',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  mp4: 'video/mp4',
+  mov: 'video/quicktime',
+  mp3: 'audio/mpeg',
+  ogg: 'audio/ogg',
+  oga: 'audio/ogg',
+  webm: 'audio/webm',
+  wav: 'audio/wav',
+  m4a: 'audio/mp4',
+};
+
+function inferMimetype(filenameOrUrl?: string): string | undefined {
+  if (!filenameOrUrl) return undefined;
+  const cleaned = filenameOrUrl.split('?')[0].split('#')[0];
+  const ext = cleaned.split('.').pop()?.toLowerCase();
+  return ext ? MIME_BY_EXT[ext] : undefined;
+}
+
+function buildWahaFile(url: string, filename?: string, mimetype?: string): {
+  url: string;
+  mimetype?: string;
+  filename?: string;
+} {
+  const finalMime = mimetype ?? inferMimetype(filename) ?? inferMimetype(url);
+  const file: { url: string; mimetype?: string; filename?: string } = { url };
+  if (finalMime) file.mimetype = finalMime;
+  if (filename) file.filename = filename;
+  return file;
+}
+
 // =============================================================================
 // Funções principais
 // =============================================================================
@@ -193,6 +237,8 @@ async function parseWahaSendResponse(response: Response): Promise<WahaSendResult
 export async function sendWahaImage(params: {
   to: string;
   mediaUrl: string;
+  filename?: string;
+  mimetype?: string;
   caption?: string;
   wahaConfig: WahaConfig;
 }): Promise<WahaSendResult> {
@@ -203,7 +249,7 @@ export async function sendWahaImage(params: {
     body: JSON.stringify({
       session: params.wahaConfig.sessionName,
       chatId: toChatId(params.to),
-      file: { url: params.mediaUrl },
+      file: buildWahaFile(params.mediaUrl, params.filename, params.mimetype),
       caption: params.caption ?? '',
     }),
   });
@@ -217,6 +263,7 @@ export async function sendWahaFile(params: {
   to: string;
   mediaUrl: string;
   filename: string;
+  mimetype?: string;
   caption?: string;
   wahaConfig: WahaConfig;
 }): Promise<WahaSendResult> {
@@ -227,7 +274,7 @@ export async function sendWahaFile(params: {
     body: JSON.stringify({
       session: params.wahaConfig.sessionName,
       chatId: toChatId(params.to),
-      file: { url: params.mediaUrl, filename: params.filename },
+      file: buildWahaFile(params.mediaUrl, params.filename, params.mimetype),
       caption: params.caption ?? '',
     }),
   });
@@ -246,6 +293,8 @@ export async function sendWahaFile(params: {
 export async function sendWahaVoice(params: {
   to: string;
   mediaUrl: string;
+  filename?: string;
+  mimetype?: string;
   wahaConfig: WahaConfig;
 }): Promise<WahaSendResult> {
   const url = `${params.wahaConfig.baseUrl}/api/sendVoice`;
@@ -255,7 +304,7 @@ export async function sendWahaVoice(params: {
     body: JSON.stringify({
       session: params.wahaConfig.sessionName,
       chatId: toChatId(params.to),
-      file: { url: params.mediaUrl },
+      file: buildWahaFile(params.mediaUrl, params.filename, params.mimetype),
       convert: true,
     }),
   });
@@ -268,6 +317,8 @@ export async function sendWahaVoice(params: {
 export async function sendWahaVideo(params: {
   to: string;
   mediaUrl: string;
+  filename?: string;
+  mimetype?: string;
   caption?: string;
   wahaConfig: WahaConfig;
 }): Promise<WahaSendResult> {
@@ -278,7 +329,7 @@ export async function sendWahaVideo(params: {
     body: JSON.stringify({
       session: params.wahaConfig.sessionName,
       chatId: toChatId(params.to),
-      file: { url: params.mediaUrl },
+      file: buildWahaFile(params.mediaUrl, params.filename, params.mimetype),
       caption: params.caption ?? '',
     }),
   });
