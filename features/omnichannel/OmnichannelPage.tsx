@@ -400,12 +400,16 @@ function ConversationComposer({
     );
   }
 
-  const uploadAttachment = organizationId
-    ? async (file: File) => {
-        const r = await uploadMutation.mutateAsync({ organizationId, file });
-        return { url: r.url, mediaType: r.mediaType, filename: r.filename };
-      }
-    : undefined;
+  // Sempre definimos uploadAttachment — se passássemos undefined quando organizationId
+  // ainda não carregou, o MessageInput esconderia clip/mic permanentemente. Em vez
+  // disso, validamos no momento do clique e propagamos um erro legível.
+  const uploadAttachment = async (file: File) => {
+    if (!organizationId) {
+      throw new Error('Sessão ainda carregando. Aguarde um instante e tente novamente.');
+    }
+    const r = await uploadMutation.mutateAsync({ organizationId, file });
+    return { url: r.url, mediaType: r.mediaType, filename: r.filename };
+  };
 
   const channel = conversation.channel as ConversationChannel;
 

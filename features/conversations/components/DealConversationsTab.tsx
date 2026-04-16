@@ -67,15 +67,17 @@ export function DealConversationsTab({ dealId }: DealConversationsTabProps) {
     },
   });
 
-  // Upload de anexos (habilitado só se temos orgId)
+  // Upload de anexos — sempre definido para garantir que clip/mic apareçam mesmo
+  // se organizationId ainda estiver carregando. Validação ocorre no clique.
   const { organizationId } = useAuth();
   const uploadMutation = useUploadConversationAttachment();
-  const uploadAttachment = organizationId
-    ? async (file: File) => {
-        const r = await uploadMutation.mutateAsync({ organizationId, file });
-        return { url: r.url, mediaType: r.mediaType, filename: r.filename };
-      }
-    : undefined;
+  const uploadAttachment = async (file: File) => {
+    if (!organizationId) {
+      throw new Error('Sessão ainda carregando. Aguarde um instante e tente novamente.');
+    }
+    const r = await uploadMutation.mutateAsync({ organizationId, file });
+    return { url: r.url, mediaType: r.mediaType, filename: r.filename };
+  };
 
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden">

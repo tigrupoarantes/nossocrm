@@ -85,9 +85,15 @@ export async function rehostInboundMedia(
     });
 
     if (!response.ok) {
+      // Captura o início da resposta para distinguir 401 (HTML de login) de
+      // outros erros sem inflar o log. WAHA sem x-api-key retorna HTML.
+      const bodySnippet = await response.text().catch(() => '');
       console.error('[MediaRehost] fetch falhou', {
         status: response.status,
+        statusText: response.statusText,
         url: params.sourceUrl.slice(0, 120),
+        contentType: response.headers.get('content-type'),
+        bodySnippet: bodySnippet.slice(0, 200),
       });
       return null;
     }
@@ -96,8 +102,13 @@ export async function rehostInboundMedia(
     const size = buffer.byteLength;
 
     // Content-Type do servidor pode ser mais confiável que o declarado.
-    const responseMime = response.headers.get('content-type') || '';
-    const mimetype = params.mimetype || responseMime.split(';')[0].trim() || 'application/octet-stream';
+    // Strippa codec (`audio/ogg; codecs=opus` → `audio/ogg`) em AMBAS as fontes
+    // — o bucket `conversation-attachments` tem `allowed_mime_types` sem codec,
+    // e upload com codec é rejeitado silenciosamente (áudio inbound do WhatsApp
+    // chega como `audio/ogg; codecs=opus`).
+    const responseMime = (response.headers.get('content-type') || '').split(';')[0].trim();
+    const declaredMime = (params.mimetype || '').split(';')[0].trim();
+    const mimetype = declaredMime || responseMime || 'application/octet-stream';
     const ext = extensionForMime(mimetype);
 
     const rawBase = params.filenameHint

@@ -131,13 +131,36 @@ export function MessageInput({
 
   // ---------- Audio recording ----------
 
+  // Cleanup garantido — chamado em finally para evitar isRecording travado
+  const cleanupRecording = useCallback(() => {
+    if (recordTimerRef.current) {
+      window.clearInterval(recordTimerRef.current);
+      recordTimerRef.current = null;
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+    setIsRecording(false);
+  }, []);
+
   const startRecording = async () => {
     if (!uploadAttachment || isRecording) return;
     setUploadError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
-      const mimeCandidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'];
+      // OGG/Opus é o formato nativo do WhatsApp PTT — priorizá-lo evita que o
+      // WAHA tenha que transcodificar (e que o WhatsApp do destinatário crashe
+      // tentando reproduzir um WebM como voice message). Fallback para webm/mp4
+      // só em browsers que não suportam OGG (ex: Safari).
+      const mimeCandidates = [
+        'audio/ogg;codecs=opus',
+        'audio/ogg',
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/mp4',
+      ];
       const mime = mimeCandidates.find((m) => MediaRecorder.isTypeSupported(m)) || '';
       const rec = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
       recorderRef.current = rec;
@@ -146,25 +169,36 @@ export function MessageInput({
         if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
       };
       rec.onstop = () => {
-        const blobMime = rec.mimeType || 'audio/webm';
-        const blob = new Blob(chunksRef.current, { type: blobMime });
-        // 5MB check
-        if (blob.size > MAX_ATTACHMENT_BYTES) {
-          setUploadError('Áudio acima de 5 MB. Grave mais curto.');
-        } else {
-          const ext = blobMime.includes('mp4') ? 'm4a' : 'webm';
-          const file = new File([blob], `audio-${Date.now()}.${ext}`, { type: blobMime });
-          setPending({
-            file,
-            previewUrl: URL.createObjectURL(file),
-            mediaType: 'audio',
-            filename: file.name,
-          });
+        try {
+          const blobMime = rec.mimeType || 'audio/webm';
+          const blob = new Blob(chunksRef.current, { type: blobMime });
+          if (blob.size > MAX_ATTACHMENT_BYTES) {
+            setUploadError('Áudio acima de 5 MB. Grave mais curto.');
+          } else if (blob.size > 0) {
+            // Extensão alinhada com MIME — WhatsApp/WAHA usam a extensão como
+            // dica para escolher o pipeline de envio (PTT vs anexo).
+            const ext = blobMime.includes('ogg')
+              ? 'ogg'
+              : blobMime.includes('mp4')
+              ? 'm4a'
+              : 'webm';
+            const file = new File([blob], `audio-${Date.now()}.${ext}`, { type: blobMime });
+            setPending({
+              file,
+              previewUrl: URL.createObjectURL(file),
+              mediaType: 'audio',
+              filename: file.name,
+            });
+          }
+        } finally {
+          cleanupRecording();
         }
-        if (streamRef.current) {
-          streamRef.current.getTracks().forEach((t) => t.stop());
-          streamRef.current = null;
-        }
+      };
+      // onerror garante que isRecording não fica travado se MediaRecorder falhar
+      rec.onerror = (e) => {
+        console.error('[MessageInput] MediaRecorder error', e);
+        setUploadError('Erro durante a gravação.');
+        cleanupRecording();
       };
       rec.start();
       setIsRecording(true);
@@ -173,34 +207,41 @@ export function MessageInput({
         setRecordSeconds((s) => s + 1);
       }, 1000);
     } catch (err) {
+      console.error('[MessageInput] startRecording falhou', err);
       setUploadError(
         err instanceof Error && err.name === 'NotAllowedError'
           ? 'Permissão de microfone negada.'
           : 'Não foi possível acessar o microfone.',
       );
+      cleanupRecording();
     }
   };
 
   const stopRecording = () => {
     if (!isRecording) return;
-    recorderRef.current?.stop();
-    setIsRecording(false);
-    if (recordTimerRef.current) {
-      window.clearInterval(recordTimerRef.current);
-      recordTimerRef.current = null;
+    try {
+      if (recorderRef.current && recorderRef.current.state !== 'inactive') {
+        recorderRef.current.stop();
+        // cleanupRecording será chamado no onstop (finally)
+      } else {
+        cleanupRecording();
+      }
+    } catch (err) {
+      console.error('[MessageInput] stopRecording falhou', err);
+      cleanupRecording();
     }
   };
 
   const cancelRecording = () => {
-    if (recorderRef.current && recorderRef.current.state !== 'inactive') {
-      // Descarta chunks antes do onstop gravar o blob
-      chunksRef.current = [];
-      recorderRef.current.stop();
-    }
-    setIsRecording(false);
-    if (recordTimerRef.current) {
-      window.clearInterval(recordTimerRef.current);
-      recordTimerRef.current = null;
+    try {
+      if (recorderRef.current && recorderRef.current.state !== 'inactive') {
+        chunksRef.current = []; // descarta chunks antes do onstop
+        recorderRef.current.stop();
+      }
+    } catch (err) {
+      console.error('[MessageInput] cancelRecording falhou', err);
+    } finally {
+      cleanupRecording();
     }
   };
 
@@ -217,11 +258,12 @@ export function MessageInput({
       try {
         mediaResult = await uploadAttachment(pending.file);
       } catch (err) {
+        console.error('[MessageInput] upload do anexo falhou', err);
         setUploadError(err instanceof Error ? err.message : 'Falha ao enviar arquivo.');
-        setIsUploading(false);
         return;
+      } finally {
+        setIsUploading(false);
       }
-      setIsUploading(false);
     }
 
     try {
@@ -239,6 +281,7 @@ export function MessageInput({
         inputRef.current.focus();
       }
     } catch (err) {
+      console.error('[MessageInput] onSend falhou', err);
       setUploadError(err instanceof Error ? err.message : 'Falha ao enviar mensagem.');
     }
   };
@@ -397,7 +440,7 @@ export function MessageInput({
             }
           }}
           placeholder={pending ? 'Legenda (opcional) — Enter envia' : 'Digite uma mensagem... (Shift+Enter para nova linha)'}
-          disabled={disabled || isSending || isUploading || isRecording}
+          disabled={disabled || isRecording}
           className="flex-1 bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 resize-none max-h-32 leading-snug"
         />
         <button
