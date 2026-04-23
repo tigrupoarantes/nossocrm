@@ -124,6 +124,12 @@ export async function POST(req: Request) {
     .single();
 
   if (insertErr) {
+    console.error('[messages/send] insert failed', {
+      organizationId: profile.organization_id,
+      conversationId,
+      code: insertErr.code,
+      message: insertErr.message,
+    });
     return NextResponse.json({ error: 'Failed to persist message' }, { status: 500 });
   }
 
