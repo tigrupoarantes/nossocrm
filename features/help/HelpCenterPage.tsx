@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { BookOpen, Search, Tag, Eye, ChevronRight, ArrowLeft } from 'lucide-react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase/client'
@@ -41,6 +42,9 @@ function renderMarkdown(md: string): string {
 }
 
 export function HelpCenterPage() {
+  const searchParams = useSearchParams()
+  const router = useRouter()
+
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null)
@@ -69,6 +73,21 @@ export function HelpCenterPage() {
     viewMutation.mutate(article.id)
   }
 
+  // Deep link: abrir artigo direto via /help?slug=xxx
+  useEffect(() => {
+    const slug = searchParams?.get('slug')
+    if (!slug || selectedArticle) return
+    const found = articles.find(a => a.slug === slug)
+    if (found) openArticle(found)
+  }, [searchParams, articles, selectedArticle, openArticle])
+
+  const closeArticle = () => {
+    setSelectedArticle(null)
+    if (searchParams?.get('slug')) {
+      router.replace('/help')
+    }
+  }
+
   const categories = ['all', ...Object.keys(CATEGORY_META)]
 
   const filtered = articles.filter((a) => {
@@ -85,7 +104,7 @@ export function HelpCenterPage() {
         <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8">
           <button
             type="button"
-            onClick={() => setSelectedArticle(null)}
+            onClick={closeArticle}
             className="flex items-center gap-2 text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 mb-6 transition-colors"
           >
             <ArrowLeft className="h-4 w-4" />

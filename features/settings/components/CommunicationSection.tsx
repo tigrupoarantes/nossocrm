@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Mail, MessageCircle, Shield, Building2, CheckCircle, XCircle, Loader2, Eye, EyeOff, Smartphone, Copy, ExternalLink, Info } from 'lucide-react';
 import { useToast } from '@/context/ToastContext';
+import { FirstTimeBanner } from '@/components/help/FirstTimeBanner';
+import { HelpPopover } from '@/components/help/HelpPopover';
 
 // =============================================================================
 // Types
@@ -92,10 +94,23 @@ function ConfigCard({ title, icon: Icon, configured, children }: {
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, help, children }: {
+  label: string;
+  help?: { description: React.ReactNode; articleSlug?: string; title?: string };
+  children: React.ReactNode;
+}) {
   return (
     <div>
-      <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">{label}</label>
+      <label className="flex items-center gap-1.5 text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
+        <span>{label}</span>
+        {help && (
+          <HelpPopover
+            title={help.title}
+            description={help.description}
+            articleSlug={help.articleSlug}
+          />
+        )}
+      </label>
       {children}
     </div>
   );
@@ -368,6 +383,13 @@ export function CommunicationSection() {
         Configure os canais de comunicação usados pelas automações do Funil de Qualificação.
       </p>
 
+      <FirstTimeBanner
+        articleSlug="como-conectar-whatsapp"
+        title="Conecte o WhatsApp pra ativar todas as automações"
+        description="Sem WhatsApp conectado, nenhuma automação de mensagem dispara. Levamos você pelos 6 passos: URL do servidor, API Key, sessão, QR code e teste final."
+        hidden={status.waha || status.metaWhatsApp}
+      />
+
       {/* SMTP */}
       <ConfigCard title="E-mail (SMTP)" icon={Mail} configured={status.smtp}>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -546,15 +568,39 @@ export function CommunicationSection() {
       <ConfigCard title="WhatsApp (WAHA)" icon={Smartphone} configured={status.waha}>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="sm:col-span-2">
-            <Field label="URL base do servidor WAHA">
-              <input className={INPUT} value={waha.baseUrl} onChange={e => setWaha(s => ({ ...s, baseUrl: e.target.value }))} placeholder="http://localhost:3000" />
+            <Field
+              label="URL base do servidor WAHA"
+              help={{
+                title: 'Onde está rodando o WAHA?',
+                description:
+                  'Endereço completo do seu servidor WAHA, com https://. Ex.: https://waha.minhaempresa.com.br. NÃO coloque "/api" no final — só a base. Se você ainda não tem servidor, peça pra equipe de TI subir um container Docker.',
+                articleSlug: 'como-conectar-whatsapp',
+              }}
+            >
+              <input className={INPUT} value={waha.baseUrl} onChange={e => setWaha(s => ({ ...s, baseUrl: e.target.value }))} placeholder="https://waha.minhaempresa.com.br" />
               <p className="text-xs text-slate-400 mt-1">Endereço onde o WAHA está rodando (ex.: Docker local ou VPS)</p>
             </Field>
           </div>
-          <Field label="API Key">
+          <Field
+            label="API Key"
+            help={{
+              title: 'O que é a API Key?',
+              description:
+                'É a senha que protege seu servidor WAHA. Foi definida quando o WAHA foi instalado, geralmente na variável de ambiente WHATSAPP_API_KEY. Sem ela, qualquer um conseguia mandar mensagem pelo seu número. Se não souber, pergunte ao TI.',
+              articleSlug: 'como-conectar-whatsapp',
+            }}
+          >
             <PasswordField value={waha.apiKey} onChange={v => setWaha(s => ({ ...s, apiKey: v }))} />
           </Field>
-          <Field label="Nome da sessão">
+          <Field
+            label="Nome da sessão"
+            help={{
+              title: 'O que é a sessão?',
+              description:
+                'Cada "sessão" é um número de WhatsApp diferente. Use "default" se vai usar só um número. Se a empresa tem mais de um (ex.: vendas e suporte cada com seu número), cada sessão é uma instância separada.',
+              articleSlug: 'como-conectar-whatsapp',
+            }}
+          >
             <input className={INPUT} value={waha.sessionName} onChange={e => setWaha(s => ({ ...s, sessionName: e.target.value }))} placeholder="default" />
           </Field>
         </div>

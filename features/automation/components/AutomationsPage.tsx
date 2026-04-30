@@ -4,6 +4,8 @@ import React, { useEffect, useState } from 'react';
 import { Loader2, Plus, Trash2, Zap } from 'lucide-react';
 import { useBoards } from '@/lib/query/hooks';
 import { boardStagesService } from '@/lib/supabase';
+import { FirstTimeBanner } from '@/components/help/FirstTimeBanner';
+import { HelpPopover } from '@/components/help/HelpPopover';
 import {
   useAutomationRules,
   useCreateAutomationRule,
@@ -164,6 +166,8 @@ export function AutomationsPage() {
     );
   }
 
+  const hasActiveRule = (rules ?? []).some(r => r.is_active);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -185,6 +189,20 @@ export function AutomationsPage() {
           </button>
         )}
       </div>
+
+      <FirstTimeBanner
+        articleSlug="automacao-lead-novo-whatsapp"
+        title="Crie a primeira mensagem automática pra leads novos"
+        description="Lead frio fica frio em horas. Configure uma regra que manda WhatsApp na hora que o lead entra no board — sem ninguém digitar. O tutorial mostra o que escrever, quais variáveis usar e como testar."
+        hidden={hasActiveRule}
+      />
+
+      <FirstTimeBanner
+        articleSlug="automacao-resposta-mover-stage"
+        title="Mova o card sozinho quando o lead responde"
+        description="Pare de procurar quem respondeu. Configure uma regra que joga o card pra coluna 'Em conversa' no segundo em que vem mensagem nova. O vendedor olha só o que importa."
+        hidden={hasActiveRule}
+      />
 
       {isFormOpen && (
         <div className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-5 space-y-4">
@@ -219,7 +237,21 @@ export function AutomationsPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Gatilho</label>
+              <label className="flex items-center gap-1.5 text-xs font-bold text-slate-500 uppercase mb-1">
+                <span>Gatilho</span>
+                <HelpPopover
+                  title="O que é um gatilho?"
+                  description={
+                    <>
+                      É o evento que faz a regra disparar. Os mais usados:
+                      {'\n'}
+                      • <strong>Quando um lead entra no board</strong> — dispara assim que o deal é criado. Use pra mensagem de boas-vindas.{'\n'}
+                      • <strong>Quando o lead responde</strong> — dispara quando vem mensagem nova do lead. Use pra mover o card.
+                    </>
+                  }
+                  articleSlug="automacao-lead-novo-whatsapp"
+                />
+              </label>
               <select
                 value={form.triggerType}
                 onChange={e => setForm({ ...form, triggerType: e.target.value as TriggerType })}
@@ -231,7 +263,20 @@ export function AutomationsPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Ação</label>
+              <label className="flex items-center gap-1.5 text-xs font-bold text-slate-500 uppercase mb-1">
+                <span>Ação</span>
+                <HelpPopover
+                  title="O que é uma ação?"
+                  description={
+                    <>
+                      É o que o CRM faz quando o gatilho acontece:
+                      {'\n'}
+                      • <strong>Enviar WhatsApp</strong> — manda mensagem pro telefone do contato.{'\n'}
+                      • <strong>Mover para outro estágio</strong> — pula o card pra outra coluna do kanban.
+                    </>
+                  }
+                />
+              </label>
               <select
                 value={form.actionType}
                 onChange={e => setForm({ ...form, actionType: e.target.value as ActionType })}
@@ -245,8 +290,21 @@ export function AutomationsPage() {
 
           {form.actionType === 'send_whatsapp' && (
             <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
-                Mensagem
+              <label className="flex items-center gap-1.5 text-xs font-bold text-slate-500 uppercase mb-1">
+                <span>Mensagem</span>
+                <HelpPopover
+                  title="Como escrever uma boa mensagem?"
+                  description={
+                    <>
+                      Curto, pessoal, com pergunta no final. Use as variáveis abaixo pra personalizar:{'\n\n'}
+                      • <code>{'{{nome_contato}}'}</code> vira o nome do lead{'\n'}
+                      • <code>{'{{empresa_lead}}'}</code> vira o nome da empresa{'\n'}
+                      • <code>{'{{cnpj}}'}</code> e <code>{'{{segmento}}'}</code> também{'\n\n'}
+                      Se o campo não estiver preenchido, vira string vazia (não aparece &quot;undefined&quot; pro lead).
+                    </>
+                  }
+                  articleSlug="automacao-lead-novo-whatsapp"
+                />
               </label>
               <textarea
                 value={form.messageBody}
