@@ -3,6 +3,10 @@
     {
       "path": "/api/internal/automation/process",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/internal/weekly-conversion-report",
+      "schedule": "0 12 * * 1"
     }
   ]
 }
