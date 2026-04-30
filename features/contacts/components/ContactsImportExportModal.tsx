@@ -1,8 +1,12 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Download, Upload, FileDown } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { useToast } from '@/context/ToastContext';
 import { stringifyCsv, withUtf8Bom, type CsvDelimiter } from '@/lib/utils/csv';
+import { supabase } from '@/lib/supabase/client';
+
+type BoardOption = { id: string; name: string };
+type StageOption = { id: string; name: string; label?: string | null };
 
 type Panel = 'export' | 'import';
 
@@ -65,6 +69,79 @@ export function ContactsImportExportModal(props: {
   const [createCompanies, setCreateCompanies] = useState(true);
   const [isImporting, setIsImporting] = useState(false);
   const [importResult, setImportResult] = useState<any>(null);
+
+  // Board destination (opcional): cada contato novo vira deal e dispara automação
+  const [addToBoard, setAddToBoard] = useState(false);
+  const [boards, setBoards] = useState<BoardOption[]>([]);
+  const [stages, setStages] = useState<StageOption[]>([]);
+  const [boardId, setBoardId] = useState<string>('');
+  const [stageId, setStageId] = useState<string>('');
+  const [loadingBoards, setLoadingBoards] = useState(false);
+  const [loadingStages, setLoadingStages] = useState(false);
+
+  // Carrega boards quando o usuário liga a opção e ainda não carregou
+  useEffect(() => {
+    if (!addToBoard || boards.length || !supabase) return;
+    let cancelled = false;
+    setLoadingBoards(true);
+    void supabase
+      .from('boards')
+      .select('id, name, position, is_default')
+      .is('deleted_at', null)
+      .order('is_default', { ascending: false })
+      .order('position', { ascending: true })
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        setLoadingBoards(false);
+        if (error) {
+          toast?.(`Erro ao carregar boards: ${error.message}`, 'error');
+          return;
+        }
+        const list = (data || []).map((b: any) => ({ id: b.id as string, name: b.name as string }));
+        setBoards(list);
+        if (list.length && !boardId) setBoardId(list[0].id);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [addToBoard, boards.length, boardId, toast]);
+
+  // Carrega estágios quando o board muda
+  useEffect(() => {
+    if (!addToBoard || !boardId || !supabase) {
+      setStages([]);
+      setStageId('');
+      return;
+    }
+    let cancelled = false;
+    setLoadingStages(true);
+    void supabase
+      .from('board_stages')
+      .select('id, name, label, order, is_default')
+      .eq('board_id', boardId)
+      .order('order', { ascending: true })
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        setLoadingStages(false);
+        if (error) {
+          toast?.(`Erro ao carregar estágios: ${error.message}`, 'error');
+          setStages([]);
+          setStageId('');
+          return;
+        }
+        const list = (data || []).map((s: any) => ({
+          id: s.id as string,
+          name: s.name as string,
+          label: (s.label as string | null) ?? null,
+        }));
+        setStages(list);
+        const defaultStage = (data || []).find((s: any) => s.is_default) || (data || [])[0];
+        setStageId(defaultStage?.id ?? '');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [addToBoard, boardId, toast]);
 
   // Export state
   const [isExporting, setIsExporting] = useState(false);
@@ -137,6 +214,10 @@ export function ContactsImportExportModal(props: {
       toast?.('Selecione um arquivo CSV.', 'error');
       return;
     }
+    if (addToBoard && (!boardId || !stageId)) {
+      toast?.('Escolha o board e o estágio inicial antes de importar.', 'error');
+      return;
+    }
     setIsImporting(true);
     setImportResult(null);
     try {
@@ -145,6 +226,10 @@ export function ContactsImportExportModal(props: {
       fd.append('mode', mode);
       fd.append('createCompanies', String(createCompanies));
       if (delimiter !== 'auto') fd.append('delimiter', delimiter);
+      if (addToBoard && boardId && stageId) {
+        fd.append('boardId', boardId);
+        fd.append('stageId', stageId);
+      }
 
       const res = await fetch('/api/contacts/import', { method: 'POST', body: fd });
       const data = await res.json().catch(() => null);
@@ -153,9 +238,12 @@ export function ContactsImportExportModal(props: {
       }
       setImportResult(data);
       const totals = data?.totals;
+      const dealsPart = (totals?.dealsCreated ?? 0) > 0
+        ? ` — ${totals.dealsCreated} deals adicionados ao board`
+        : '';
       toast?.(
-        `Import concluído: ${totals?.created ?? 0} criados, ${totals?.updated ?? 0} atualizados, ${totals?.skipped ?? 0} ignorados, ${totals?.errors ?? 0} erros.`,
-        (totals?.errors ?? 0) > 0 ? 'warning' : 'success'
+        `Import concluído: ${totals?.created ?? 0} criados, ${totals?.updated ?? 0} atualizados, ${totals?.skipped ?? 0} ignorados, ${totals?.errors ?? 0} erros${dealsPart}.`,
+        (totals?.errors ?? 0) > 0 || (totals?.dealErrors ?? 0) > 0 ? 'warning' : 'success'
       );
     } catch (e) {
       toast?.((e as Error)?.message || 'Erro ao importar.', 'error');
@@ -333,6 +421,61 @@ export function ContactsImportExportModal(props: {
           </div>
           </div>
 
+          <div className="space-y-2">
+            <label className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-200">
+              <input
+                type="checkbox"
+                checked={addToBoard}
+                onChange={e => setAddToBoard(e.target.checked)}
+                className="mt-1"
+              />
+              <span>Adicionar leads importados a um board (kanban)</span>
+            </label>
+            <div className="text-xs text-slate-500 dark:text-slate-400 pl-7">
+              Quando marcado: cada contato novo vira um deal no board escolhido. Automações do board
+              (ex.: <i>WhatsApp ao entrar como Lead novo</i>) disparam para cada um. Contatos que já existem
+              (atualização por email) <b>não</b> geram deal — só os novos.
+            </div>
+            {addToBoard && (
+              <div className="pl-7 grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                    Board
+                  </label>
+                  <select
+                    value={boardId}
+                    onChange={e => setBoardId(e.target.value)}
+                    disabled={loadingBoards || !boards.length}
+                    className="w-full text-sm rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 px-2 py-1.5"
+                  >
+                    {loadingBoards && <option value="">Carregando…</option>}
+                    {!loadingBoards && !boards.length && <option value="">Nenhum board</option>}
+                    {boards.map(b => (
+                      <option key={b.id} value={b.id}>{b.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                    Estágio inicial
+                  </label>
+                  <select
+                    value={stageId}
+                    onChange={e => setStageId(e.target.value)}
+                    disabled={loadingStages || !stages.length}
+                    className="w-full text-sm rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 px-2 py-1.5"
+                  >
+                    {loadingStages && <option value="">Carregando…</option>}
+                    {!loadingStages && !stages.length && <option value="">Sem estágios</option>}
+                    {stages.map(s => (
+                      <option key={s.id} value={s.id}>{s.label || s.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -356,6 +499,14 @@ export function ContactsImportExportModal(props: {
                 {importResult.totals?.skipped ?? 0} ignorados •{' '}
                 {importResult.totals?.errors ?? 0} erros
               </div>
+              {(importResult.totals?.dealsCreated ?? 0) > 0 && (
+                <div className="text-xs text-emerald-700 dark:text-emerald-300">
+                  <b>Board:</b> {importResult.totals.dealsCreated} deals adicionados
+                  {(importResult.totals?.dealErrors ?? 0) > 0 && (
+                    <> • {importResult.totals.dealErrors} falhas ao criar deal</>
+                  )}
+                </div>
+              )}
               {(importResult.totals?.errors ?? 0) > 0 && (
                 <button
                   type="button"

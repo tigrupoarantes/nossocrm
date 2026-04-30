@@ -3,6 +3,9 @@ import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
 import { detectCsvDelimiter, parseCsv, type CsvDelimiter } from '@/lib/utils/csv';
 import { normalizePhoneE164 } from '@/lib/phone';
+import { onDealCreated } from '@/lib/automation/triggers';
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const ImportModeSchema = z.enum(['create_only', 'upsert_by_email', 'skip_duplicates_by_email']);
 type ImportMode = z.infer<typeof ImportModeSchema>;
@@ -128,6 +131,9 @@ export async function POST(req: Request) {
     const delimiterRaw = form.get('delimiter');
     const createCompanies = BooleanStringSchema.parse(String(form.get('createCompanies') ?? 'true'));
 
+    const boardIdRaw = (form.get('boardId') ?? '').toString().trim();
+    const stageIdRaw = (form.get('stageId') ?? '').toString().trim();
+
     const modeResult = ImportModeSchema.safeParse(String(modeRaw ?? 'upsert_by_email'));
     if (!modeResult.success) {
       return NextResponse.json({ error: 'Parâmetro mode inválido.' }, { status: 400 });
@@ -136,6 +142,67 @@ export async function POST(req: Request) {
 
     if (!(file instanceof File)) {
       return NextResponse.json({ error: 'Arquivo CSV não enviado (field "file").' }, { status: 400 });
+    }
+
+    // Resolve board + stage destination (opcional). Quando boardId presente,
+    // cada contato novo vira um deal no board e dispara onDealCreated.
+    let boardId: string | null = null;
+    let stageId: string | null = null;
+    if (boardIdRaw) {
+      if (!UUID_RE.test(boardIdRaw)) {
+        return NextResponse.json({ error: 'boardId inválido.' }, { status: 400 });
+      }
+      const { data: board, error: boardErr } = await supabase
+        .from('boards')
+        .select('id')
+        .eq('id', boardIdRaw)
+        .eq('organization_id', orgId)
+        .is('deleted_at', null)
+        .maybeSingle();
+      if (boardErr) {
+        return NextResponse.json({ error: boardErr.message }, { status: 400 });
+      }
+      if (!board) {
+        return NextResponse.json({ error: 'Board não encontrado para esta organização.' }, { status: 404 });
+      }
+      boardId = boardIdRaw;
+
+      if (stageIdRaw) {
+        if (!UUID_RE.test(stageIdRaw)) {
+          return NextResponse.json({ error: 'stageId inválido.' }, { status: 400 });
+        }
+        const { data: stage, error: stageErr } = await supabase
+          .from('board_stages')
+          .select('id')
+          .eq('id', stageIdRaw)
+          .eq('board_id', boardId)
+          .eq('organization_id', orgId)
+          .maybeSingle();
+        if (stageErr) {
+          return NextResponse.json({ error: stageErr.message }, { status: 400 });
+        }
+        if (!stage) {
+          return NextResponse.json({ error: 'Estágio não pertence ao board informado.' }, { status: 404 });
+        }
+        stageId = stageIdRaw;
+      } else {
+        // Sem stageId: usar primeiro estágio do board (menor `order`).
+        const { data: firstStage, error: firstStageErr } = await supabase
+          .from('board_stages')
+          .select('id')
+          .eq('board_id', boardId)
+          .eq('organization_id', orgId)
+          .order('order', { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        if (firstStageErr) {
+          return NextResponse.json({ error: firstStageErr.message }, { status: 400 });
+        }
+        if (!firstStage) {
+          return NextResponse.json({ error: 'Board não tem estágios cadastrados.' }, { status: 400 });
+        }
+        stageId = firstStage.id as string;
+      }
     }
 
     const text = await file.text();
@@ -279,12 +346,19 @@ export async function POST(req: Request) {
     let updated = 0;
     let skipped = 0;
 
+    // Contatos recém-criados que devem virar deal no board (apenas insert path).
+    // Updates não geram deal pra evitar duplicação ao re-importar a mesma lista.
+    const newContactsForBoard: Array<{ id: string; name: string; email: string | null }> = [];
+
     // Import in manageable chunks to reduce payload sizes
     const insertBatch: Array<{ rowNumber: number; payload: Record<string, unknown> }> = [];
     const flushInsert = async () => {
       if (!insertBatch.length) return;
       const payloads = insertBatch.map(i => i.payload);
-      const { error: insertError } = await supabase.from('contacts').insert(payloads);
+      const { data: insertedRows, error: insertError } = await supabase
+        .from('contacts')
+        .insert(payloads)
+        .select('id, name, email');
       if (insertError) {
         // If batch insert fails, mark all rows as errors (keep it simple for v1)
         for (const item of insertBatch) {
@@ -292,6 +366,17 @@ export async function POST(req: Request) {
         }
       } else {
         created += insertBatch.length;
+        if (boardId && insertedRows) {
+          for (const row of insertedRows as Array<{ id: string; name: string | null; email: string | null }>) {
+            if (row?.id) {
+              newContactsForBoard.push({
+                id: row.id,
+                name: row.name ?? '',
+                email: row.email ?? null,
+              });
+            }
+          }
+        }
       }
       insertBatch.length = 0;
     };
@@ -360,6 +445,48 @@ export async function POST(req: Request) {
     // Remove internal field from potential logs; not persisted in DB anyway (supabase ignores unknown)
     // but we keep it only in memory; ok.
 
+    // Cria deals + dispara automação para os contatos novos quando há board destino.
+    let dealsCreated = 0;
+    let dealErrors = 0;
+    if (boardId && stageId && newContactsForBoard.length) {
+      const sourceTag = `csv:${file.name}`.slice(0, 64);
+      for (const contact of newContactsForBoard) {
+        const title = (contact.name || contact.email || 'Lead importado').slice(0, 200);
+        const { data: deal, error: dealErr } = await supabase
+          .from('deals')
+          .insert({
+            organization_id: orgId,
+            title,
+            board_id: boardId,
+            stage_id: stageId,
+            contact_id: contact.id,
+            value: 0,
+            probability: 0,
+            is_won: false,
+            is_lost: false,
+            tags: ['base_fria', sourceTag],
+            custom_fields: {},
+          })
+          .select('id')
+          .single();
+
+        if (dealErr || !deal?.id) {
+          dealErrors += 1;
+          continue;
+        }
+        dealsCreated += 1;
+
+        // Fire-and-forget: dispara automações (regras com trigger_type='deal_created').
+        void onDealCreated({
+          dealId: deal.id as string,
+          boardId,
+          organizationId: orgId,
+        }).catch(err => {
+          console.error('[contacts/import] onDealCreated falhou', err);
+        });
+      }
+    }
+
     return NextResponse.json({
       ok: true,
       delimiter,
@@ -371,6 +498,8 @@ export async function POST(req: Request) {
         updated,
         skipped,
         errors: errors.length,
+        dealsCreated,
+        dealErrors,
       },
       errors,
       detectedHeaders: headers,
