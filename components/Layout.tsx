@@ -50,6 +50,8 @@ import {
   Link2,
   BookOpen,
   Send as SendNav,
+  Zap,
+  CheckCircle2,
 } from 'lucide-react';
 import { useCRM } from '../context/CRMContext';
 import { useAuth } from '../context/AuthContext';
@@ -275,6 +277,12 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         </div>
 
         <nav className={`flex-1 py-3 overflow-y-auto flex flex-col gap-3 ${sidebarCollapsed ? 'items-center px-2' : 'px-3'}`} aria-label="Navegação do sistema">
+          {/*
+           * NOTA: Lista hardcoded do sidebar desktop.
+           * Existe duplicacao com components/navigation/navConfig.ts (que cobre tablet
+           * e mobile via NavigationRail e MoreMenuSheet). Ao adicionar/remover item
+           * no menu, atualizar AMBOS pra manter consistencia entre layouts.
+           */}
           {([
             {
               label: 'Principal',
@@ -292,7 +300,10 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                 { to: '/prospecting', icon: BarChart3, label: 'Prospectar' },
                 { to: '/ads', icon: Megaphone, label: 'Anúncios' },
                 { to: '/dispatch', icon: SendNav, label: 'Disparos' },
+                { to: '/automacoes', icon: Zap, label: 'Automações' },
                 { to: '/super-agent', icon: Bot, label: 'Super Agente' },
+                { to: '/ai', icon: Sparkles, label: 'Assistente IA' },
+                { to: '/decisions', icon: CheckCircle2, label: 'Decisões' },
               ],
             },
             {
