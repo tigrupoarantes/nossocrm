@@ -16,6 +16,10 @@ import {
   BookOpen,
   GraduationCap,
   Zap,
+  Globe,
+  Send,
+  Sparkles,
+  CheckCircle2,
 } from 'lucide-react';
 
 export type PrimaryNavId = 'omnichannel' | 'boards' | 'contacts' | 'activities' | 'more';
@@ -42,9 +46,13 @@ export type SecondaryNavId =
   | 'settings'
   | 'profile'
   | 'super-agent'
+  | 'ai-hub'
+  | 'decisions'
   | 'prospecting'
   | 'ads'
   | 'automations'
+  | 'landing-pages'
+  | 'dispatch'
   | 'connections'
   | 'help'
   | 'onboarding';
@@ -66,8 +74,12 @@ export const SECONDARY_NAV: SecondaryNavItem[] = [
   { id: 'prospecting', label: 'Prospectar', href: '/prospecting', icon: Search, group: 'sales' },
   { id: 'ads', label: 'Anúncios', href: '/ads', icon: Megaphone, group: 'sales' },
   { id: 'automations', label: 'Automações', href: '/automacoes', icon: Zap, group: 'sales' },
+  { id: 'landing-pages', label: 'Landing Pages', href: '/landing-pages', icon: Globe, group: 'sales' },
+  { id: 'dispatch', label: 'Disparo em Massa', href: '/dispatch', icon: Send, group: 'sales' },
   // IA
   { id: 'super-agent', label: 'Super Agente', href: '/super-agent', icon: Bot, group: 'ai' },
+  { id: 'ai-hub', label: 'Assistente IA', href: '/ai', icon: Sparkles, group: 'ai' },
+  { id: 'decisions', label: 'Decisões', href: '/decisions', icon: CheckCircle2, group: 'ai' },
   // Sistema
   { id: 'connections', label: 'Conexões', href: '/connections', icon: Link2, group: 'system' },
   { id: 'settings', label: 'Configurações', href: '/settings', icon: Settings, group: 'system' },
