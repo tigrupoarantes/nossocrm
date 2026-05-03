@@ -15,6 +15,7 @@ import {
   Link2,
   BookOpen,
   GraduationCap,
+  Zap,
 } from 'lucide-react';
 
 export type PrimaryNavId = 'omnichannel' | 'boards' | 'contacts' | 'activities' | 'more';
@@ -43,6 +44,7 @@ export type SecondaryNavId =
   | 'super-agent'
   | 'prospecting'
   | 'ads'
+  | 'automations'
   | 'connections'
   | 'help'
   | 'onboarding';
@@ -63,6 +65,7 @@ export const SECONDARY_NAV: SecondaryNavItem[] = [
   // Vendas
   { id: 'prospecting', label: 'Prospectar', href: '/prospecting', icon: Search, group: 'sales' },
   { id: 'ads', label: 'Anúncios', href: '/ads', icon: Megaphone, group: 'sales' },
+  { id: 'automations', label: 'Automações', href: '/automacoes', icon: Zap, group: 'sales' },
   // IA
   { id: 'super-agent', label: 'Super Agente', href: '/super-agent', icon: Bot, group: 'ai' },
   // Sistema
