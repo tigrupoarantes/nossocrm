@@ -17,6 +17,7 @@
 import { supabase } from './client';
 import { Deal, DealItem, OrganizationId } from '@/types';
 import { sanitizeUUID, requireUUID, isValidUUID } from './utils';
+import { onDealCreated } from '@/lib/automation/triggers';
 
 // =============================================================================
 // Organization inference (client-side, RLS-safe)
@@ -432,6 +433,17 @@ export const dealsService = {
         .from('deal_items')
         .select('*')
         .eq('deal_id', data.id);
+
+      // Fire-and-forget: dispara automacoes (regras com trigger_type='deal_created').
+      // Inclui stageId pra filtrar regras vinculadas a coluna especifica.
+      void onDealCreated({
+        dealId: data.id as string,
+        boardId,
+        stageId: insertData.stage_id ?? undefined,
+        organizationId: organizationId!,
+      }).catch(err => {
+        console.error('[deals.create] onDealCreated falhou', err);
+      });
 
       return {
         data: transformDeal(data as DbDeal, (items || []) as DbDealItem[]),

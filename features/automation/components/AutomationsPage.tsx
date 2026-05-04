@@ -25,7 +25,7 @@ type ActionType = AutomationRule['action_type'];
 const TRIGGER_LABELS: Record<TriggerType, string> = {
   deal_created: 'Quando um lead entra no board',
   response_received: 'Quando o lead responde',
-  stage_entered: 'Quando entra em um estágio',
+  stage_entered: 'Quando o lead entra na coluna',
   days_in_stage: 'Após N dias no estágio',
 };
 
@@ -367,6 +367,7 @@ export function AutomationsPage() {
                 className="w-full bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm"
               >
                 <option value="deal_created">{TRIGGER_LABELS.deal_created}</option>
+                <option value="stage_entered">{TRIGGER_LABELS.stage_entered}</option>
                 <option value="response_received">{TRIGGER_LABELS.response_received}</option>
               </select>
             </div>

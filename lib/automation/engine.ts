@@ -8,7 +8,7 @@
  * @module lib/automation/engine
  */
 
-import { createClient } from '@/lib/supabase/server';
+import { createStaticAdminClient } from '@/lib/supabase/server';
 import { AutomationRule, AutomationActionType } from '@/types';
 
 // =============================================================================
@@ -38,7 +38,7 @@ interface ActionResult {
 // Buscar schedules pendentes
 // =============================================================================
 
-async function fetchPendingSchedules(supabase: Awaited<ReturnType<typeof createClient>>): Promise<PendingSchedule[]> {
+async function fetchPendingSchedules(supabase: ReturnType<typeof createStaticAdminClient>): Promise<PendingSchedule[]> {
   const { data, error } = await supabase
     .from('automation_schedules')
     .select(`
@@ -78,7 +78,7 @@ async function fetchPendingSchedules(supabase: Awaited<ReturnType<typeof createC
 // =============================================================================
 
 async function executeAction(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: ReturnType<typeof createStaticAdminClient>,
   schedule: PendingSchedule
 ): Promise<ActionResult> {
   const { actionType, actionConfig } = schedule.rule;
@@ -189,7 +189,7 @@ async function executeAction(
 // =============================================================================
 
 async function moveDealToStage(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: ReturnType<typeof createStaticAdminClient>,
   params: {
     dealId: string;
     stageId?: string;
@@ -238,7 +238,7 @@ async function moveDealToStage(
 // =============================================================================
 
 async function moveDealToNextBoard(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: ReturnType<typeof createStaticAdminClient>,
   params: {
     dealId: string;
     toBoardId?: string;
@@ -309,7 +309,7 @@ async function moveDealToNextBoard(
 // =============================================================================
 
 async function recordExecution(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: ReturnType<typeof createStaticAdminClient>,
   params: {
     scheduleId: string;
     ruleId: string;
@@ -342,7 +342,9 @@ export async function processAutomationSchedules(): Promise<{
   succeeded: number;
   failed: number;
 }> {
-  const supabase = await createClient();
+  // Cron roda sem contexto de usuario; service role bypassa RLS pra
+  // ler schedules pendentes e gravar executions/updates de status.
+  const supabase = createStaticAdminClient();
   const schedules = await fetchPendingSchedules(supabase);
 
   let succeeded = 0;

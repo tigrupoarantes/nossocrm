@@ -221,6 +221,7 @@ export async function POST(request: Request) {
     onDealCreated({
       dealId: data.id,
       boardId,
+      stageId: stageId ?? undefined,
       organizationId: auth.organizationId,
     }).catch(() => { /* erros de automação não bloqueiam a resposta */ });
   }

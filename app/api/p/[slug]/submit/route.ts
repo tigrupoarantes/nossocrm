@@ -14,6 +14,7 @@
  */
 
 import { createStaticAdminClient } from '@/lib/supabase/server';
+import { onDealCreated } from '@/lib/automation/triggers';
 
 export const runtime = 'nodejs';
 
@@ -198,6 +199,17 @@ export async function POST(
         .single();
       if (dealError) console.error('[submit] deal insert error:', dealError.message);
       dealId = newDeal?.id ?? null;
+
+      // Fire-and-forget: dispara automacoes deal_created vinculadas ao
+      // board/coluna onde a LP cria os leads. Service role bypassa RLS.
+      if (dealId) {
+        void onDealCreated({
+          dealId,
+          boardId: lp.target_board_id,
+          stageId,
+          organizationId: lp.organization_id,
+        }).catch(err => console.error('[submit] onDealCreated falhou', err));
+      }
     }
   }
 
