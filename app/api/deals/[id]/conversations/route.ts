@@ -55,20 +55,32 @@ export async function GET(_req: Request, { params }: RouteParams) {
     return NextResponse.json({ data: [] });
   }
 
-  // Buscar mensagens de todas as conversas
+  // Buscar últimas 50 mensagens de cada conversa.
+  // Carregar TUDO de uma vez explodia o payload em leads com histórico longo.
+  // O scroll infinito carrega mais via /api/conversations/[id]/messages?before=...
   const conversationIds = conversations.map(c => c.id);
+  const MESSAGES_PER_CONVERSATION = 50;
 
-  const { data: messages, error: msgErr } = await supabase
-    .from('messages')
-    .select(
-      'id, conversation_id, channel, external_message_id, message_type, direction, body, media_url, status, sent_at, created_at, metadata'
-    )
-    .in('conversation_id', conversationIds)
-    .order('sent_at', { ascending: true });
+  const messageBatches = await Promise.all(
+    conversationIds.map(async convId => {
+      const { data, error } = await supabase
+        .from('messages')
+        .select(
+          'id, conversation_id, channel, external_message_id, message_type, direction, body, media_url, status, sent_at, created_at, metadata'
+        )
+        .eq('conversation_id', convId)
+        .order('sent_at', { ascending: false })
+        .limit(MESSAGES_PER_CONVERSATION);
+      if (error) {
+        console.error('[deals/conversations] message fetch error', error);
+        return [] as NonNullable<typeof data>;
+      }
+      // Inverte para ASC para o componente renderizar do mais antigo ao mais recente.
+      return (data ?? []).reverse();
+    }),
+  );
 
-  if (msgErr) {
-    return NextResponse.json({ error: 'Failed to fetch messages' }, { status: 500 });
-  }
+  const messages = messageBatches.flat();
 
   // Transformar mensagens snake_case → camelCase para alinhar com o tipo `Message`
   // usado no client (MessageBubble lê `mediaUrl`, `messageType`, etc).

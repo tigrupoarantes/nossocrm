@@ -532,6 +532,11 @@ export interface AutomationRule {
   id: string;
   organizationId: string;
   boardId: string | null;
+  /**
+   * Coluna específica do board onde a regra dispara. Quando NULL, vale para
+   * o board todo (mantém compatibilidade com regras anteriores).
+   */
+  stageId: string | null;
   name: string;
   triggerType: AutomationTriggerType;
   triggerConfig: {
@@ -552,6 +557,15 @@ export interface AutomationRule {
     whatsappProvider?: 'auto' | 'waha' | 'twilio';
     /** Corpo livre da mensagem (UI de regras). Interpola {{nome_contato}} etc. */
     body?: string;
+    /** Assunto livre do e-mail. Interpola variáveis como o body. */
+    subject?: string;
+    /** Anexo opcional para WhatsApp (caption = body) ou e-mail. */
+    attachment?: {
+      url: string;
+      mediaType: 'image' | 'audio' | 'video' | 'document';
+      filename?: string;
+      mimetype?: string;
+    };
   };
   isActive: boolean;
   position: number;

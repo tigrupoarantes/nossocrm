@@ -120,7 +120,11 @@ export function DealConversationsTab({ dealId }: DealConversationsTabProps) {
         {!hasConversations && !isLoading ? (
           <NoConversations />
         ) : (
-          <ConversationThread messages={visibleMessages} loading={isLoading} />
+          <ConversationThread
+            messages={visibleMessages}
+            loading={isLoading}
+            conversationId={selectedConversationId}
+          />
         )}
         <div className="shrink-0">
           <MessageInput

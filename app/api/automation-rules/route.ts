@@ -14,6 +14,7 @@ type ActionType = 'send_whatsapp' | 'send_email' | 'move_stage' | 'move_to_next_
 interface RuleInput {
   name: string;
   boardId: string | null;
+  stageId: string | null;
   triggerType: TriggerType;
   triggerConfig: Record<string, unknown>;
   actionType: ActionType;
@@ -33,6 +34,7 @@ function validateInput(body: unknown): RuleInput | { error: string } {
   return {
     name: (b.name as string).trim(),
     boardId: (b.boardId as string | null) || null,
+    stageId: (b.stageId as string | null) || null,
     triggerType: b.triggerType as TriggerType,
     triggerConfig: (b.triggerConfig as Record<string, unknown>) || {},
     actionType: b.actionType as ActionType,
@@ -58,7 +60,7 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from('automation_rules')
-    .select('id, name, board_id, trigger_type, trigger_config, action_type, action_config, is_active, position, created_at, updated_at')
+    .select('id, name, board_id, stage_id, trigger_type, trigger_config, action_type, action_config, is_active, position, created_at, updated_at')
     .eq('organization_id', profile.organization_id)
     .order('position', { ascending: true })
     .order('created_at', { ascending: false });
@@ -95,6 +97,7 @@ export async function POST(request: Request) {
       organization_id: profile.organization_id,
       name: parsed.name,
       board_id: parsed.boardId,
+      stage_id: parsed.stageId,
       trigger_type: parsed.triggerType,
       trigger_config: parsed.triggerConfig,
       action_type: parsed.actionType,

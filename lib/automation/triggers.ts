@@ -20,17 +20,26 @@ function addDays(date: Date, days: number): Date {
 
 async function getActiveRulesForBoard(
   boardId: string,
-  triggerType: AutomationRule['triggerType']
+  triggerType: AutomationRule['triggerType'],
+  stageId?: string
 ): Promise<AutomationRule[]> {
   if (!supabase) return [];
 
-  const { data, error } = await supabase
+  let query = supabase
     .from('automation_rules')
     .select('*')
     .eq('board_id', boardId)
     .eq('trigger_type', triggerType)
-    .eq('is_active', true)
-    .order('position', { ascending: true });
+    .eq('is_active', true);
+
+  // Quando o trigger conhece a coluna (deal_created/stage_entered/days_in_stage),
+  // só carregamos regras compatíveis: as ligadas àquela coluna OU as ligadas ao
+  // board todo (stage_id IS NULL).
+  if (stageId) {
+    query = query.or(`stage_id.is.null,stage_id.eq.${stageId}`);
+  }
+
+  const { data, error } = await query.order('position', { ascending: true });
 
   if (error || !data) return [];
 
@@ -38,6 +47,7 @@ async function getActiveRulesForBoard(
     id: r.id,
     organizationId: r.organization_id,
     boardId: r.board_id,
+    stageId: r.stage_id ?? null,
     name: r.name,
     triggerType: r.trigger_type,
     triggerConfig: r.trigger_config ?? {},
@@ -90,8 +100,10 @@ export async function onDealCreated(params: {
   dealId: string;
   boardId: string;
   organizationId: string;
+  /** Coluna onde o deal foi criado. Quando informado, restringe regras à coluna. */
+  stageId?: string;
 }): Promise<void> {
-  const rules = await getActiveRulesForBoard(params.boardId, 'deal_created');
+  const rules = await getActiveRulesForBoard(params.boardId, 'deal_created', params.stageId);
   if (rules.length === 0) return;
 
   const now = new Date();
@@ -116,9 +128,11 @@ export async function onStageEntered(params: {
   stageId: string;
   organizationId: string;
 }): Promise<void> {
-  const rules = await getActiveRulesForBoard(params.boardId, 'stage_entered');
-  const daysInStageRules = await getActiveRulesForBoard(params.boardId, 'days_in_stage');
+  const rules = await getActiveRulesForBoard(params.boardId, 'stage_entered', params.stageId);
+  const daysInStageRules = await getActiveRulesForBoard(params.boardId, 'days_in_stage', params.stageId);
 
+  // Mantém o filtro legado por trigger_config.stageId (regras antigas que usam
+  // JSONB em vez da coluna nova) — quem usar a coluna stage_id já foi filtrado no SQL.
   const allRules = [...rules, ...daysInStageRules].filter(
     (r) => !r.triggerConfig.stageId || r.triggerConfig.stageId === params.stageId
   );

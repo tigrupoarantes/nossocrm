@@ -9,6 +9,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { toWhatsAppPhone } from '@/lib/phone';
+import { interpolateVariables } from './variables';
 
 // =============================================================================
 // Types
@@ -58,26 +59,16 @@ export interface AutomationWahaParams {
    * `{{nome_contato}}`, `{{empresa_lead}}`, `{{cnpj}}`, `{{segmento}}`.
    */
   bodyTemplate?: string;
-}
-
-/**
- * Interpola variáveis {{var}} no texto livre da regra usando dados do
- * contato e do lead. Mantém vars não reconhecidas como literais.
- */
-function interpolateBody(
-  template: string,
-  vars: {
-    contactName?: string | null;
-    leadCompanyName?: string | null;
-    leadCompanyCnpj?: string | null;
-    leadCompanyIndustry?: string | null;
-  }
-): string {
-  return template
-    .replace(/\{\{\s*nome_contato\s*\}\}/gi, vars.contactName || '')
-    .replace(/\{\{\s*empresa_lead\s*\}\}/gi, vars.leadCompanyName || '')
-    .replace(/\{\{\s*cnpj\s*\}\}/gi, vars.leadCompanyCnpj || '')
-    .replace(/\{\{\s*segmento\s*\}\}/gi, vars.leadCompanyIndustry || '');
+  /**
+   * Anexo opcional. Quando presente, o disparo usa o endpoint correspondente
+   * do WAHA (sendImage / sendFile / sendVoice / sendVideo) e o body vira caption.
+   */
+  attachment?: {
+    url: string;
+    mediaType: 'image' | 'audio' | 'video' | 'document';
+    filename?: string;
+    mimetype?: string;
+  };
 }
 
 // =============================================================================
@@ -373,7 +364,7 @@ export async function sendAutomationWaha(
   if (!wahaConfig?.baseUrl) throw new Error('WAHA not configured for this organization');
 
   const body = params.bodyTemplate
-    ? interpolateBody(params.bodyTemplate, {
+    ? interpolateVariables(params.bodyTemplate, {
         contactName: contact.name ?? 'Cliente',
         leadCompanyName: contact.lead_company_name,
         leadCompanyCnpj: contact.lead_company_cnpj,
@@ -383,7 +374,48 @@ export async function sendAutomationWaha(
         contactName: contact.name ?? 'Cliente',
       });
 
-  const result = await sendWahaMessage({ to: contact.phone, body, wahaConfig });
+  let result: WahaSendResult;
+  if (params.attachment) {
+    const { url: mediaUrl, mediaType, filename, mimetype } = params.attachment;
+    if (mediaType === 'image') {
+      result = await sendWahaImage({
+        to: contact.phone,
+        mediaUrl,
+        filename,
+        mimetype,
+        caption: body,
+        wahaConfig,
+      });
+    } else if (mediaType === 'video') {
+      result = await sendWahaVideo({
+        to: contact.phone,
+        mediaUrl,
+        filename,
+        mimetype,
+        caption: body,
+        wahaConfig,
+      });
+    } else if (mediaType === 'audio') {
+      result = await sendWahaVoice({
+        to: contact.phone,
+        mediaUrl,
+        filename,
+        mimetype,
+        wahaConfig,
+      });
+    } else {
+      result = await sendWahaFile({
+        to: contact.phone,
+        mediaUrl,
+        filename: filename ?? 'arquivo',
+        mimetype,
+        caption: body,
+        wahaConfig,
+      });
+    }
+  } else {
+    result = await sendWahaMessage({ to: contact.phone, body, wahaConfig });
+  }
 
   // Persistir mensagem outbound
   await storeOutboundMessage(supabase, {

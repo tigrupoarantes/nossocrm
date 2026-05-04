@@ -38,6 +38,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
   const updates: Record<string, unknown> = {};
   if (typeof body.name === 'string') updates.name = body.name.trim();
   if ('boardId' in body) updates.board_id = body.boardId || null;
+  if ('stageId' in body) updates.stage_id = body.stageId || null;
   if (typeof body.triggerType === 'string') updates.trigger_type = body.triggerType;
   if (body.triggerConfig && typeof body.triggerConfig === 'object') updates.trigger_config = body.triggerConfig;
   if (typeof body.actionType === 'string') updates.action_type = body.actionType;

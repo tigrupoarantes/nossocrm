@@ -6,6 +6,7 @@ export interface AutomationRule {
   id: string;
   name: string;
   board_id: string | null;
+  stage_id: string | null;
   trigger_type: 'deal_created' | 'stage_entered' | 'days_in_stage' | 'response_received';
   trigger_config: Record<string, unknown>;
   action_type: 'send_whatsapp' | 'send_email' | 'move_stage' | 'move_to_next_board';
@@ -19,6 +20,7 @@ export interface AutomationRule {
 export interface CreateAutomationRuleInput {
   name: string;
   boardId: string | null;
+  stageId: string | null;
   triggerType: AutomationRule['trigger_type'];
   triggerConfig: Record<string, unknown>;
   actionType: AutomationRule['action_type'];

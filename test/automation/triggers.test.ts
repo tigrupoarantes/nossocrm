@@ -18,6 +18,9 @@ const { insertMock, fromMock, rulesHolder } = vi.hoisted(() => {
       return {
         select: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
+        // .or() é usado para filtrar por (stage_id IS NULL OR stage_id = X);
+        // o mock retorna o próprio chain para que `.order()` finalize a query.
+        or: vi.fn().mockReturnThis(),
         order: vi.fn(async () => ({ data: rulesHolder.data, error: null })),
       }
     }

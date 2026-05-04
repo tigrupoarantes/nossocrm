@@ -107,6 +107,15 @@ async function executeAction(
           dealId: schedule.dealId,
           organizationId: schedule.organizationId,
           templateId: actionConfig.templateId ?? 'primeiro-contato',
+          subjectTemplate: actionConfig.subject,
+          bodyTemplate: actionConfig.body,
+          attachment: actionConfig.attachment
+            ? {
+                url: actionConfig.attachment.url,
+                filename: actionConfig.attachment.filename ?? 'anexo',
+                mediaType: actionConfig.attachment.mediaType,
+              }
+            : undefined,
         });
         return { success: true, result };
       }
@@ -130,6 +139,7 @@ async function executeAction(
             organizationId: schedule.organizationId,
             templateId,
             bodyTemplate: actionConfig.body,
+            attachment: actionConfig.attachment,
           });
           return { success: true, result };
         } else if (twilioConfig?.accountSid) {

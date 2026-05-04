@@ -1,7 +1,15 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import { useDealConversations, useSendMessage, useInitiateConversation } from '@/lib/query/hooks/useConversationsQuery';
+import { useState, useMemo, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import {
+  useDealConversations,
+  useSendMessage,
+  useInitiateConversation,
+  useMarkConversationRead,
+  conversationKeys,
+} from '@/lib/query/hooks/useConversationsQuery';
+import { queryKeys } from '@/lib/query/queryKeys';
 import type { ConversationChannel, Message } from '@/types';
 import type { MessageSendPayload } from '../components/MessageInput';
 
@@ -20,6 +28,56 @@ export function useDealConversationsController(dealId: string | null) {
   const { data: conversations = [], isLoading } = useDealConversations(dealId);
   const sendMessage = useSendMessage();
   const initiateConversation = useInitiateConversation();
+  const markRead = useMarkConversationRead();
+  const queryClient = useQueryClient();
+
+  // Marca como lida toda conversa visível com unread_count > 0.
+  // Quando "Todas" está selecionado, marca todas; quando uma específica
+  // está selecionada, marca só aquela. PATCH é idempotente; o setQueryData
+  // otimista zera o cache antes da resposta para evitar loop no useEffect.
+  useEffect(() => {
+    if (!dealId || conversations.length === 0) return;
+
+    const target = selectedConversationId
+      ? conversations.filter(c => c.id === selectedConversationId)
+      : conversations;
+
+    const toMark = target.filter(c => c.unread_count > 0);
+    if (toMark.length === 0) return;
+
+    let totalCleared = 0;
+    for (const conv of toMark) {
+      totalCleared += conv.unread_count;
+      markRead.mutate(conv.id);
+    }
+
+    queryClient.setQueryData(
+      conversationKeys.forDeal(dealId),
+      (prev: typeof conversations | undefined) =>
+        prev?.map(c =>
+          toMark.some(m => m.id === c.id) ? { ...c, unread_count: 0 } : c,
+        ),
+    );
+    if (totalCleared > 0) {
+      queryClient.setQueriesData<unknown>(
+        { queryKey: queryKeys.deals.all, exact: false },
+        (prev: unknown) => {
+          if (!Array.isArray(prev)) return prev;
+          return prev.map((d: Record<string, unknown>) =>
+            d?.id === dealId
+              ? {
+                  ...d,
+                  unreadInboundCount: Math.max(
+                    0,
+                    ((d.unreadInboundCount as number | undefined) ?? 0) - totalCleared,
+                  ),
+                }
+              : d,
+          );
+        },
+      );
+    }
+  }, [dealId, conversations, selectedConversationId, markRead, queryClient]);
 
   // Todas as mensagens de todas as conversas, ordenadas por sent_at
   const allMessages = useMemo((): Message[] => {

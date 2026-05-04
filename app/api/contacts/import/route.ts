@@ -480,6 +480,7 @@ export async function POST(req: Request) {
         void onDealCreated({
           dealId: deal.id as string,
           boardId,
+          stageId,
           organizationId: orgId,
         }).catch(err => {
           console.error('[contacts/import] onDealCreated falhou', err);

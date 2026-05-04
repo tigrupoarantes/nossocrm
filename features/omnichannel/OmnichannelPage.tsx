@@ -568,7 +568,11 @@ export function OmnichannelPage() {
               isMutating={isMutating}
               isSendingToBoard={sendToBoard.isPending}
             />
-            <ConversationThread messages={messages} loading={messagesLoading} />
+            <ConversationThread
+              messages={messages}
+              loading={messagesLoading}
+              conversationId={selectedConversation.id}
+            />
             <ConversationComposer
               conversation={selectedConversation}
               currentUserId={currentUserId}

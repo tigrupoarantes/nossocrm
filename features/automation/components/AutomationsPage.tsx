@@ -1,11 +1,16 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import { Loader2, Plus, Trash2, Zap } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Loader2, Paperclip, Plus, Trash2, X, Zap } from 'lucide-react';
 import { useBoards } from '@/lib/query/hooks';
 import { boardStagesService } from '@/lib/supabase';
 import { FirstTimeBanner } from '@/components/help/FirstTimeBanner';
 import { HelpPopover } from '@/components/help/HelpPopover';
+import { useAuth } from '@/context/AuthContext';
+import {
+  useUploadConversationAttachment,
+  type AttachmentMediaType,
+} from '@/features/conversations/hooks/useConversationAttachment';
 import {
   useAutomationRules,
   useCreateAutomationRule,
@@ -38,12 +43,25 @@ const VARIABLE_SNIPPETS = [
   { label: 'Segmento', value: '{{segmento}}' },
 ];
 
+interface AttachmentState {
+  url: string;
+  mediaType: AttachmentMediaType;
+  filename: string;
+  mimetype: string;
+}
+
 interface FormState {
   name: string;
   boardId: string;
+  /** Coluna específica do board (opcional). Em branco = vale para o board todo. */
+  stageId: string;
   triggerType: TriggerType;
   actionType: ActionType;
   messageBody: string;
+  /** Assunto do e-mail (apenas action_type=send_email). */
+  emailSubject: string;
+  /** Anexo opcional (WhatsApp ou e-mail). */
+  attachment: AttachmentState | null;
   fromStageId: string;
   toStageId: string;
 }
@@ -51,9 +69,12 @@ interface FormState {
 const EMPTY_FORM: FormState = {
   name: '',
   boardId: '',
+  stageId: '',
   triggerType: 'deal_created',
   actionType: 'send_whatsapp',
   messageBody: 'Olá, {{nome_contato}}! Obrigado pelo interesse. Em que posso ajudar?',
+  emailSubject: 'Olá, {{nome_contato}} — vamos conversar?',
+  attachment: null,
   fromStageId: '',
   toStageId: '',
 };
@@ -95,6 +116,9 @@ export function AutomationsPage() {
   const createMutation = useCreateAutomationRule();
   const updateMutation = useUpdateAutomationRule();
   const deleteMutation = useDeleteAutomationRule();
+  const { organizationId } = useAuth();
+  const uploadAttachment = useUploadConversationAttachment();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
@@ -107,6 +131,39 @@ export function AutomationsPage() {
 
   const insertVariable = (v: string) => {
     setForm(prev => ({ ...prev, messageBody: `${prev.messageBody}${v}` }));
+  };
+
+  const insertSubjectVariable = (v: string) => {
+    setForm(prev => ({ ...prev, emailSubject: `${prev.emailSubject}${v}` }));
+  };
+
+  const handlePickAttachment = () => {
+    if (!organizationId) {
+      setError('Sessão ainda carregando. Tente em alguns segundos.');
+      return;
+    }
+    fileInputRef.current?.click();
+  };
+
+  const handleAttachmentChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !organizationId) return;
+    setError(null);
+    try {
+      const result = await uploadAttachment.mutateAsync({ organizationId, file });
+      setForm(prev => ({
+        ...prev,
+        attachment: {
+          url: result.url,
+          mediaType: result.mediaType,
+          filename: result.filename,
+          mimetype: result.mimetype,
+        },
+      }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Falha ao enviar anexo.');
+    }
   };
 
   const resetForm = () => {
@@ -127,13 +184,36 @@ export function AutomationsPage() {
       triggerConfig.stageId = form.fromStageId;
     }
 
+    const attachmentConfig = form.attachment
+      ? {
+          url: form.attachment.url,
+          mediaType: form.attachment.mediaType,
+          filename: form.attachment.filename,
+          mimetype: form.attachment.mimetype,
+        }
+      : undefined;
+
     let actionConfig: Record<string, unknown> = {};
     if (form.actionType === 'send_whatsapp') {
-      if (!form.messageBody.trim()) {
-        setError('Digite o corpo da mensagem.');
+      if (!form.messageBody.trim() && !attachmentConfig) {
+        setError('Digite o corpo da mensagem ou anexe um arquivo.');
         return;
       }
-      actionConfig = { body: form.messageBody };
+      actionConfig = { body: form.messageBody, attachment: attachmentConfig };
+    } else if (form.actionType === 'send_email') {
+      if (!form.emailSubject.trim()) {
+        setError('Informe o assunto do e-mail.');
+        return;
+      }
+      if (!form.messageBody.trim()) {
+        setError('Digite o corpo do e-mail.');
+        return;
+      }
+      actionConfig = {
+        subject: form.emailSubject,
+        body: form.messageBody,
+        attachment: attachmentConfig,
+      };
     } else if (form.actionType === 'move_stage') {
       if (!form.toStageId) {
         setError('Selecione o estágio de destino.');
@@ -146,6 +226,7 @@ export function AutomationsPage() {
       await createMutation.mutateAsync({
         name: form.name.trim(),
         boardId: form.boardId || null,
+        stageId: form.stageId || null,
         triggerType: form.triggerType,
         triggerConfig,
         actionType: form.actionType,
@@ -226,13 +307,41 @@ export function AutomationsPage() {
               <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Board</label>
               <select
                 value={form.boardId}
-                onChange={e => setForm({ ...form, boardId: e.target.value, fromStageId: '', toStageId: '' })}
+                onChange={e => setForm({ ...form, boardId: e.target.value, stageId: '', fromStageId: '', toStageId: '' })}
                 className="w-full bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm"
               >
                 <option value="">Todos os boards</option>
                 {boardList.map(b => (
                   <option key={b.id} value={b.id}>{b.name}</option>
                 ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="flex items-center gap-1.5 text-xs font-bold text-slate-500 uppercase mb-1">
+                <span>Coluna (opcional)</span>
+                <HelpPopover
+                  title="Por que escolher uma coluna?"
+                  description={
+                    <>
+                      Quando você seleciona uma coluna, a regra só dispara para leads que entram naquela coluna específica.{'\n\n'}
+                      Deixe em branco se quiser que a regra valha para o board inteiro.
+                    </>
+                  }
+                />
+              </label>
+              <select
+                value={form.stageId}
+                onChange={e => setForm({ ...form, stageId: e.target.value })}
+                disabled={!form.boardId}
+                className="w-full bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm disabled:opacity-60"
+              >
+                <option value="">Board todo</option>
+                {stagesForBoard
+                  .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+                  .map(s => (
+                    <option key={s.id} value={s.id}>{s.label || s.name}</option>
+                  ))}
               </select>
             </div>
 
@@ -279,19 +388,46 @@ export function AutomationsPage() {
               </label>
               <select
                 value={form.actionType}
-                onChange={e => setForm({ ...form, actionType: e.target.value as ActionType })}
+                onChange={e => setForm({ ...form, actionType: e.target.value as ActionType, attachment: null })}
                 className="w-full bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm"
               >
                 <option value="send_whatsapp">{ACTION_LABELS.send_whatsapp}</option>
+                <option value="send_email">{ACTION_LABELS.send_email}</option>
                 <option value="move_stage">{ACTION_LABELS.move_stage}</option>
               </select>
             </div>
           </div>
 
-          {form.actionType === 'send_whatsapp' && (
+          {form.actionType === 'send_email' && (
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Assunto</label>
+              <input
+                type="text"
+                value={form.emailSubject}
+                onChange={e => setForm({ ...form, emailSubject: e.target.value })}
+                placeholder="Olá, {{nome_contato}} — vamos conversar?"
+                className="w-full bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm"
+              />
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                <span className="text-[10px] text-slate-400 self-center">Inserir no assunto:</span>
+                {VARIABLE_SNIPPETS.map(v => (
+                  <button
+                    key={v.value}
+                    type="button"
+                    onClick={() => insertSubjectVariable(v.value)}
+                    className="text-[11px] px-2 py-0.5 rounded border border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-white/5"
+                  >
+                    {v.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {(form.actionType === 'send_whatsapp' || form.actionType === 'send_email') && (
             <div>
               <label className="flex items-center gap-1.5 text-xs font-bold text-slate-500 uppercase mb-1">
-                <span>Mensagem</span>
+                <span>{form.actionType === 'send_email' ? 'Corpo do e-mail' : 'Mensagem'}</span>
                 <HelpPopover
                   title="Como escrever uma boa mensagem?"
                   description={
@@ -313,7 +449,7 @@ export function AutomationsPage() {
                 className="w-full bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm font-mono"
                 placeholder="Olá, {{nome_contato}}!"
               />
-              <div className="flex flex-wrap gap-1.5 mt-2">
+              <div className="flex flex-wrap items-center gap-1.5 mt-2">
                 <span className="text-[10px] text-slate-400 self-center">Inserir:</span>
                 {VARIABLE_SNIPPETS.map(v => (
                   <button
@@ -325,7 +461,54 @@ export function AutomationsPage() {
                     {v.label}
                   </button>
                 ))}
+                <span className="ml-auto" />
+                <button
+                  type="button"
+                  onClick={handlePickAttachment}
+                  disabled={uploadAttachment.isPending}
+                  className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded border border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-white/5 disabled:opacity-60"
+                >
+                  {uploadAttachment.isPending ? (
+                    <Loader2 size={12} className="animate-spin" />
+                  ) : (
+                    <Paperclip size={12} />
+                  )}
+                  Anexar
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/jpg,image/png,image/webp,image/gif,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,audio/ogg,audio/mpeg,audio/mp4,audio/webm,audio/wav,video/mp4"
+                  onChange={handleAttachmentChange}
+                  className="hidden"
+                />
               </div>
+              {form.attachment && (
+                <div className="mt-2 flex items-center justify-between gap-2 rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-black/20 px-3 py-2 text-xs">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Paperclip size={14} className="text-slate-400 shrink-0" />
+                    <span className="truncate text-slate-700 dark:text-slate-200">
+                      {form.attachment.filename}
+                    </span>
+                    <span className="shrink-0 text-[10px] uppercase text-slate-400">
+                      {form.attachment.mediaType}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setForm(prev => ({ ...prev, attachment: null }))}
+                    className="p-1 text-slate-400 hover:text-red-500"
+                    aria-label="Remover anexo"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              )}
+              <p className="text-[10px] text-slate-400 mt-1">
+                {form.actionType === 'send_email'
+                  ? 'O anexo será enviado junto com o e-mail. Limite 5 MB.'
+                  : 'O texto vira legenda do anexo. Limite 5 MB.'}
+              </p>
             </div>
           )}
 
@@ -400,13 +583,25 @@ export function AutomationsPage() {
         <div className="space-y-2">
           {rules.map(rule => {
             const boardName = boardList.find(b => b.id === rule.board_id)?.name ?? 'Todos os boards';
+            const stageName = rule.stage_id
+              ? (stages.find(s => s.id === rule.stage_id)?.label
+                ?? stages.find(s => s.id === rule.stage_id)?.name
+                ?? null)
+              : null;
             const actionCfg = rule.action_config as Record<string, unknown>;
+            const bodyPreview = String(actionCfg.body ?? '').slice(0, 60);
+            const bodyEllipsis = String(actionCfg.body ?? '').length > 60 ? '…' : '';
+            const hasAttachment = Boolean(
+              (actionCfg.attachment as { url?: string } | undefined)?.url,
+            );
             const actionDescription =
               rule.action_type === 'send_whatsapp'
-                ? `Mensagem: "${String(actionCfg.body ?? '').slice(0, 60)}${String(actionCfg.body ?? '').length > 60 ? '…' : ''}"`
-                : rule.action_type === 'move_stage'
-                  ? `Mover para: ${stages.find(s => s.id === (actionCfg.stageId as string))?.name ?? '—'}`
-                  : ACTION_LABELS[rule.action_type];
+                ? `WhatsApp: "${bodyPreview}${bodyEllipsis}"${hasAttachment ? ' · 📎' : ''}`
+                : rule.action_type === 'send_email'
+                  ? `E-mail: "${String(actionCfg.subject ?? '').slice(0, 60)}"${hasAttachment ? ' · 📎' : ''}`
+                  : rule.action_type === 'move_stage'
+                    ? `Mover para: ${stages.find(s => s.id === (actionCfg.stageId as string))?.name ?? '—'}`
+                    : ACTION_LABELS[rule.action_type];
 
             return (
               <div
@@ -428,7 +623,9 @@ export function AutomationsPage() {
                     <span className="font-medium">{TRIGGER_LABELS[rule.trigger_type]}</span>
                     {' → '}
                     <span>{actionDescription}</span>
-                    <span className="text-slate-400 dark:text-slate-500"> · {boardName}</span>
+                    <span className="text-slate-400 dark:text-slate-500">
+                      {' · '}{boardName}{stageName ? ` › ${stageName}` : ''}
+                    </span>
                   </p>
                 </div>
                 <div className="flex items-center gap-2">

@@ -40,6 +40,29 @@ export async function GET(
   }
 
   const url = new URL(request.url);
+  // Cursor-mode (scroll infinito): retorna até `limit` mensagens ANTERIORES
+  // a `before` ordenadas por sent_at DESC, depois invertidas para ASC. Usa
+  // o índice idx_messages_conversation (conversation_id, sent_at DESC).
+  const before = url.searchParams.get('before');
+  const limit = Math.min(parseInt(url.searchParams.get('limit') ?? '50', 10), 200);
+
+  if (before) {
+    const { data, error } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('conversation_id', conversationId)
+      .eq('organization_id', profile.organization_id)
+      .lt('sent_at', before)
+      .order('sent_at', { ascending: false })
+      .limit(limit);
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    const mapped = (data ?? []).reverse().map(mapMessage);
+    return NextResponse.json({ data: mapped, hasMore: (data?.length ?? 0) === limit });
+  }
+
+  // Modo legado paginado por offset (mantido para compat com chamadas antigas).
   const page = parseInt(url.searchParams.get('page') ?? '0', 10);
   const pageSize = Math.min(parseInt(url.searchParams.get('pageSize') ?? '100', 10), 200);
   const from = page * pageSize;
@@ -58,21 +81,26 @@ export async function GET(
   // Normaliza snake_case (Supabase) -> camelCase (tipo Message do projeto).
   // Sem isso, componentes que leem `message.sentAt` recebem undefined e
   // renderizam "Invalid Date".
-  const mapped = (data ?? []).map((m) => ({
+  const mapped = (data ?? []).map(mapMessage);
+
+  return NextResponse.json({ data: mapped, totalCount: count ?? 0 });
+}
+
+// Mapper extraído para reuso entre modo cursor e modo offset.
+function mapMessage(m: Record<string, unknown>) {
+  return {
     id: m.id,
     organizationId: m.organization_id,
     conversationId: m.conversation_id,
-    externalMessageId: m.external_message_id ?? m.wa_message_id ?? null,
-    channel: m.channel ?? 'whatsapp',
-    messageType: m.message_type ?? 'text',
-    direction: m.direction,
-    body: m.body ?? '',
-    mediaUrl: m.media_url ?? null,
-    status: m.status,
-    sentAt: m.sent_at,
-    createdAt: m.created_at,
-    metadata: m.metadata ?? {},
-  }));
-
-  return NextResponse.json({ data: mapped, totalCount: count ?? 0 });
+    externalMessageId: (m.external_message_id ?? m.wa_message_id ?? null) as string | null,
+    channel: (m.channel ?? 'whatsapp') as string,
+    messageType: (m.message_type ?? 'text') as string,
+    direction: m.direction as string,
+    body: (m.body ?? '') as string,
+    mediaUrl: (m.media_url ?? null) as string | null,
+    status: m.status as string,
+    sentAt: m.sent_at as string,
+    createdAt: m.created_at as string,
+    metadata: (m.metadata ?? {}) as Record<string, unknown>,
+  };
 }
