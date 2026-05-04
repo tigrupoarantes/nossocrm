@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Loader2, Paperclip, Plus, Trash2, X, Zap } from 'lucide-react';
+import { Loader2, Paperclip, Pencil, Plus, Trash2, X, Zap } from 'lucide-react';
 import { useBoards } from '@/lib/query/hooks';
 import { boardStagesService } from '@/lib/supabase';
 import { FirstTimeBanner } from '@/components/help/FirstTimeBanner';
@@ -121,6 +121,7 @@ export function AutomationsPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [error, setError] = useState<string | null>(null);
 
@@ -169,7 +170,37 @@ export function AutomationsPage() {
   const resetForm = () => {
     setForm(EMPTY_FORM);
     setError(null);
+    setEditingRuleId(null);
     setIsFormOpen(false);
+  };
+
+  const startEdit = (rule: AutomationRule) => {
+    const cfg = rule.action_config as Record<string, unknown>;
+    const att = cfg.attachment as
+      | { url: string; mediaType: AttachmentMediaType; filename?: string; mimetype?: string }
+      | undefined;
+    setForm({
+      name: rule.name,
+      boardId: rule.board_id ?? '',
+      stageId: rule.stage_id ?? '',
+      triggerType: rule.trigger_type,
+      actionType: rule.action_type,
+      messageBody: (cfg.body as string) ?? '',
+      emailSubject: (cfg.subject as string) ?? '',
+      attachment: att
+        ? {
+            url: att.url,
+            mediaType: att.mediaType,
+            filename: att.filename ?? 'anexo',
+            mimetype: att.mimetype ?? '',
+          }
+        : null,
+      fromStageId: ((rule.trigger_config as Record<string, unknown>)?.stageId as string) ?? '',
+      toStageId: (cfg.stageId as string) ?? '',
+    });
+    setEditingRuleId(rule.id);
+    setError(null);
+    setIsFormOpen(true);
   };
 
   const handleSubmit = async () => {
@@ -222,17 +253,23 @@ export function AutomationsPage() {
       actionConfig = { stageId: form.toStageId };
     }
 
+    const payload = {
+      name: form.name.trim(),
+      boardId: form.boardId || null,
+      stageId: form.stageId || null,
+      triggerType: form.triggerType,
+      triggerConfig,
+      actionType: form.actionType,
+      actionConfig,
+      isActive: true,
+    };
+
     try {
-      await createMutation.mutateAsync({
-        name: form.name.trim(),
-        boardId: form.boardId || null,
-        stageId: form.stageId || null,
-        triggerType: form.triggerType,
-        triggerConfig,
-        actionType: form.actionType,
-        actionConfig,
-        isActive: true,
-      });
+      if (editingRuleId) {
+        await updateMutation.mutateAsync({ id: editingRuleId, ...payload });
+      } else {
+        await createMutation.mutateAsync(payload);
+      }
       resetForm();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro inesperado.');
@@ -288,7 +325,7 @@ export function AutomationsPage() {
       {isFormOpen && (
         <div className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-5 space-y-4">
           <h2 className="text-base font-semibold text-slate-900 dark:text-white">
-            Nova regra
+            {editingRuleId ? 'Editar regra' : 'Nova regra'}
           </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -556,11 +593,11 @@ export function AutomationsPage() {
             <button
               type="button"
               onClick={handleSubmit}
-              disabled={createMutation.isPending}
+              disabled={createMutation.isPending || updateMutation.isPending}
               className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-primary-600 hover:bg-primary-700 text-white rounded-lg shadow-sm disabled:opacity-50"
             >
-              {createMutation.isPending && <Loader2 size={14} className="animate-spin" />}
-              Criar regra
+              {(createMutation.isPending || updateMutation.isPending) && <Loader2 size={14} className="animate-spin" />}
+              {editingRuleId ? 'Salvar alterações' : 'Criar regra'}
             </button>
           </div>
         </div>
@@ -640,6 +677,15 @@ export function AutomationsPage() {
                     />
                     Ativa
                   </label>
+                  <button
+                    type="button"
+                    onClick={() => startEdit(rule)}
+                    className="p-1.5 text-slate-400 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-md"
+                    aria-label="Editar"
+                    title="Editar regra"
+                  >
+                    <Pencil size={14} />
+                  </button>
                   <button
                     type="button"
                     onClick={() => {
