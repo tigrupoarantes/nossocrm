@@ -1,9 +1,10 @@
 'use client'
 
 import React, { useState } from 'react'
-import { ChevronLeft, Send, Phone, MapPin, Star, MessageSquare, Loader2 } from 'lucide-react'
+import { ChevronLeft, Send, Phone, MapPin, Star, MessageSquare, Loader2, Download } from 'lucide-react'
 import { useMutation } from '@tanstack/react-query'
 import { useOptionalToast } from '@/context/ToastContext'
+import { stringifyCsv, withUtf8Bom } from '@/lib/utils/csv'
 
 interface Lead {
   businessName: string
@@ -26,6 +27,29 @@ export function LeadsList({ leads, campaignId, onBack, onDispatch }: Props) {
   )
   const [delaySeconds, setDelaySeconds] = useState(120)
   const [showDispatchForm, setShowDispatchForm] = useState(false)
+
+  const handleExportCsv = () => {
+    const header = ['empresa', 'telefone', 'endereco', 'avaliacao', 'tem_telefone']
+    const rows = leads.map((lead) => [
+      lead.businessName ?? '',
+      lead.phone ?? '',
+      lead.address ?? '',
+      lead.rating != null ? String(lead.rating) : '',
+      lead.phone ? 'sim' : 'nao',
+    ])
+    const csv = withUtf8Bom(stringifyCsv([header, ...rows], ','))
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const today = new Date().toISOString().slice(0, 10)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `prospeccao-${campaignId}-${today}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    addToast?.(`CSV com ${leads.length} leads baixado.`, 'success')
+  }
 
   const dispatchMutation = useMutation({
     mutationFn: async () => {
@@ -58,7 +82,16 @@ export function LeadsList({ leads, campaignId, onBack, onDispatch }: Props) {
           <h2 className="font-semibold text-slate-900 dark:text-white">{leads.length} leads encontrados</h2>
           <p className="text-xs text-slate-500">Pronto para disparar mensagens</p>
         </div>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleExportCsv}
+            disabled={leads.length === 0}
+            className="flex items-center gap-2 px-4 py-2 border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 text-slate-700 dark:text-slate-300 text-sm font-medium rounded-xl hover:bg-slate-50 dark:hover:bg-white/10 disabled:opacity-50 transition-colors"
+          >
+            <Download className="h-4 w-4" />
+            Exportar CSV
+          </button>
           <button
             type="button"
             onClick={() => setShowDispatchForm(!showDispatchForm)}
