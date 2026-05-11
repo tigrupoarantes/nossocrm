@@ -9,10 +9,21 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 // ---------------------------------------------------------------------------
 
 const { insertMock, fromMock, rulesHolder } = vi.hoisted(() => {
-  const insertMock = vi.fn(async () => ({ error: null }))
+  // createSchedule agora faz: insert(payload).select('id').single() → { data: { id }, error }
+  // Mock encadeavel: insert() retorna chain com .select().single() retornando id mock.
+  let insertCount = 0
+  const insertMock = vi.fn((_payload: unknown) => {
+    insertCount += 1
+    const mockId = `mock-schedule-${insertCount}`
+    return {
+      select: vi.fn(() => ({
+        single: vi.fn(async () => ({ data: { id: mockId }, error: null })),
+      })),
+    }
+  })
   const rulesHolder: { data: unknown[] } = { data: [] }
 
-   
+
   const fromMock = vi.fn((_table: string): any => {
     if (_table === 'automation_rules') {
       return {

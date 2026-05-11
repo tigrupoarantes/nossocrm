@@ -122,8 +122,16 @@ vi.mock('@/lib/communication/meta-config-resolver', () => ({
 
 // Triggers de automação e Super Agent — não executar de verdade
 const onResponseReceivedMock = vi.fn(async () => undefined)
+const onDealCreatedMock = vi.fn(async () => undefined)
 vi.mock('@/lib/automation/triggers', () => ({
   onResponseReceived: onResponseReceivedMock,
+  onDealCreated: onDealCreatedMock,
+}))
+// Captura inbound desacoplada — o webhook so chama, comportamento dela
+// e coberto pelos testes do proprio helper.
+const ensureContactAndDealFromInboundMock = vi.fn(async () => null)
+vi.mock('@/lib/automation/inboundCapture', () => ({
+  ensureContactAndDealFromInbound: ensureContactAndDealFromInboundMock,
 }))
 const processWithSuperAgentMock = vi.fn(async () => undefined)
 vi.mock('@/lib/ai/super-agent/engine', () => ({

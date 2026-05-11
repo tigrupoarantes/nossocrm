@@ -1,8 +1,10 @@
 /**
  * @fileoverview Automation Triggers
  *
- * Cria automation_schedules quando deals são criados ou movidos de stage.
- * Chamado pelos hooks de deal creation e stage movement.
+ * Cria automation_schedules quando deals são criados, movidos de stage ou
+ * recebem resposta. Apos criar as schedules, dispara o endpoint `run-now`
+ * fire-and-forget para que o processador rode em < 2s (sem esperar o cron
+ * de 15min).
  */
 
 import { supabase } from '@/lib/supabase/client';
@@ -16,6 +18,44 @@ function addDays(date: Date, days: number): Date {
   const result = new Date(date);
   result.setDate(result.getDate() + days);
   return result;
+}
+
+/**
+ * Resolve a URL base do app para fetches server-side. No browser usamos URL
+ * relativa (string vazia). Em Vercel/Node usamos NEXT_PUBLIC_APP_URL ou
+ * monta a partir de VERCEL_URL. Sem nenhuma, faz no-op (nao bloqueia).
+ */
+function getAppBaseUrl(): string {
+  if (typeof window !== 'undefined') return '';
+  const explicit = process.env.NEXT_PUBLIC_APP_URL?.trim();
+  if (explicit) return explicit.replace(/\/$/, '');
+  const vercel = process.env.VERCEL_URL?.trim();
+  if (vercel) return `https://${vercel.replace(/^https?:\/\//, '').replace(/\/$/, '')}`;
+  return '';
+}
+
+/**
+ * Dispara o endpoint /api/internal/automation/run-now sem aguardar resposta.
+ * Modo session (sem body) no browser; modo schedule-id no server.
+ */
+function triggerRunNow(scheduleId?: string): void {
+  try {
+    const base = getAppBaseUrl();
+    const url = `${base}/api/internal/automation/run-now`;
+    const isServer = typeof window === 'undefined';
+    const init: RequestInit = {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: isServer && scheduleId ? JSON.stringify({ scheduleId }) : undefined,
+      // Importante: nao manter o fetch vivo apos a resposta inicial.
+      keepalive: !isServer,
+    };
+    // No server, so chamamos se conseguimos uma base URL valida.
+    if (isServer && !base) return;
+    void fetch(url, init).catch(() => undefined);
+  } catch {
+    // fire-and-forget — qualquer erro e ignorado
+  }
 }
 
 async function getActiveRulesForBoard(
@@ -61,21 +101,29 @@ async function getActiveRulesForBoard(
   }));
 }
 
+/** Insere uma schedule e retorna o ID criado (ou null em falha). */
 async function createSchedule(params: {
   organizationId: string;
   ruleId: string;
   dealId: string;
   scheduledAt: Date;
-}): Promise<void> {
-  if (!supabase) return;
+}): Promise<string | null> {
+  if (!supabase) return null;
 
-  await supabase.from('automation_schedules').insert({
-    organization_id: params.organizationId,
-    rule_id: params.ruleId,
-    deal_id: params.dealId,
-    scheduled_at: params.scheduledAt.toISOString(),
-    status: 'pending',
-  });
+  const { data, error } = await supabase
+    .from('automation_schedules')
+    .insert({
+      organization_id: params.organizationId,
+      rule_id: params.ruleId,
+      deal_id: params.dealId,
+      scheduled_at: params.scheduledAt.toISOString(),
+      status: 'pending',
+    })
+    .select('id')
+    .single();
+
+  if (error || !data) return null;
+  return (data.id as string) ?? null;
 }
 
 // =============================================================================
@@ -107,15 +155,25 @@ export async function onDealCreated(params: {
   if (rules.length === 0) return;
 
   const now = new Date();
+  let immediate = false;
 
   for (const rule of rules) {
-    await createSchedule({
+    const scheduleId = await createSchedule({
       organizationId: params.organizationId,
       ruleId: rule.id,
       dealId: params.dealId,
       scheduledAt: now, // imediato
     });
+    if (scheduleId) {
+      immediate = true;
+      // No server, dispara cada schedule individualmente (modo schedule-id).
+      if (typeof window === 'undefined') triggerRunNow(scheduleId);
+    }
   }
+
+  // No browser, uma unica chamada modo session processa todas as schedules
+  // da org de uma vez (mais eficiente que N fetches).
+  if (immediate && typeof window !== 'undefined') triggerRunNow();
 }
 
 // =============================================================================
@@ -143,18 +201,27 @@ export async function onStageEntered(params: {
   await cancelPendingSchedules(params.dealId);
 
   const now = new Date();
+  let immediate = false;
 
   for (const rule of allRules) {
     const days = rule.triggerConfig.days ?? 0;
     const scheduledAt = days > 0 ? addDays(now, days) : now;
 
-    await createSchedule({
+    const scheduleId = await createSchedule({
       organizationId: params.organizationId,
       ruleId: rule.id,
       dealId: params.dealId,
       scheduledAt,
     });
+    // Schedules com delay (days > 0) ficam para o cron de 15min processar
+    // quando o scheduled_at chegar. Sem delay, dispara imediato.
+    if (scheduleId && days === 0) {
+      immediate = true;
+      if (typeof window === 'undefined') triggerRunNow(scheduleId);
+    }
   }
+
+  if (immediate && typeof window !== 'undefined') triggerRunNow();
 }
 
 // =============================================================================
@@ -175,13 +242,20 @@ export async function onResponseReceived(params: {
   if (rules.length === 0) return;
 
   const now = new Date();
+  let immediate = false;
 
   for (const rule of rules) {
-    await createSchedule({
+    const scheduleId = await createSchedule({
       organizationId: params.organizationId,
       ruleId: rule.id,
       dealId: params.dealId,
       scheduledAt: now, // imediato
     });
+    if (scheduleId) {
+      immediate = true;
+      if (typeof window === 'undefined') triggerRunNow(scheduleId);
+    }
   }
+
+  if (immediate && typeof window !== 'undefined') triggerRunNow();
 }

@@ -38,8 +38,16 @@ interface ActionResult {
 // Buscar schedules pendentes
 // =============================================================================
 
-async function fetchPendingSchedules(supabase: ReturnType<typeof createStaticAdminClient>): Promise<PendingSchedule[]> {
-  const { data, error } = await supabase
+interface FetchOpts {
+  organizationId?: string;
+  scheduleId?: string;
+}
+
+async function fetchPendingSchedules(
+  supabase: ReturnType<typeof createStaticAdminClient>,
+  opts: FetchOpts = {}
+): Promise<PendingSchedule[]> {
+  let query = supabase
     .from('automation_schedules')
     .select(`
       id,
@@ -56,6 +64,15 @@ async function fetchPendingSchedules(supabase: ReturnType<typeof createStaticAdm
     .eq('status', 'pending')
     .lte('scheduled_at', new Date().toISOString())
     .limit(50); // processar em lotes de 50 por execução
+
+  if (opts.organizationId) {
+    query = query.eq('organization_id', opts.organizationId);
+  }
+  if (opts.scheduleId) {
+    query = query.eq('id', opts.scheduleId);
+  }
+
+  const { data, error } = await query;
 
   if (error || !data) return [];
 
@@ -337,26 +354,39 @@ async function recordExecution(
 // Função principal — chamada pelo cron endpoint
 // =============================================================================
 
-export async function processAutomationSchedules(): Promise<{
+export async function processAutomationSchedules(
+  opts: { organizationId?: string; scheduleId?: string } = {}
+): Promise<{
   processed: number;
   succeeded: number;
   failed: number;
 }> {
   // Cron roda sem contexto de usuario; service role bypassa RLS pra
   // ler schedules pendentes e gravar executions/updates de status.
+  // Quando chamado pelo endpoint run-now, opts.organizationId/scheduleId
+  // restringe o escopo (evita vazamento cross-org no modo session).
   const supabase = createStaticAdminClient();
-  const schedules = await fetchPendingSchedules(supabase);
+  const schedules = await fetchPendingSchedules(supabase, opts);
 
   let succeeded = 0;
   let failed = 0;
+  let claimed = 0;
 
   for (const schedule of schedules) {
-    // Marca como "em execução" (previne dupla execução em caso de concorrência)
-    await supabase
+    // Compare-and-swap: marca como "executed" SOMENTE se ainda esta "pending".
+    // O .select() retorna o array atualizado — se vier vazio, outro processo
+    // ja pegou (run-now + cron concorrentes). Skip silencioso evita duplo envio.
+    const { data: claimedRows } = await supabase
       .from('automation_schedules')
       .update({ status: 'executed', executed_at: new Date().toISOString() })
       .eq('id', schedule.id)
-      .eq('status', 'pending');
+      .eq('status', 'pending')
+      .select('id');
+
+    if (!claimedRows || claimedRows.length === 0) {
+      continue; // outro worker pegou — pula
+    }
+    claimed++;
 
     const actionResult = await executeAction(supabase, schedule);
 
@@ -381,5 +411,5 @@ export async function processAutomationSchedules(): Promise<{
     }
   }
 
-  return { processed: schedules.length, succeeded, failed };
+  return { processed: claimed, succeeded, failed };
 }

@@ -16,7 +16,8 @@
 
 import { NextResponse } from 'next/server'
 import { createStaticAdminClient } from '@/lib/supabase/server'
-import { onResponseReceived } from '@/lib/automation/triggers'
+import { onResponseReceived, onDealCreated } from '@/lib/automation/triggers'
+import { ensureContactAndDealFromInbound } from '@/lib/automation/inboundCapture'
 import { processWithSuperAgent } from '@/lib/ai/super-agent/engine'
 import { resolveMetaConfigByPhoneNumberId } from '@/lib/communication/meta-config-resolver'
 import { rehostMetaMedia } from '@/lib/communication/media-rehost'
@@ -542,9 +543,25 @@ export async function POST(request: Request) {
 
         result.inboundProcessed += 1
 
-        // Automação só dispara se houver deal vinculado.
+        // Captura automatica: se nao havia deal, tenta criar um no board
+        // configurado (organization_settings.whatsapp_capture_*). Sem config
+        // a funcao retorna null e o comportamento antigo e preservado.
         if (dealMatch) {
           await onResponseReceived(dealMatch)
+        } else {
+          const created = await ensureContactAndDealFromInbound(supabase, {
+            organizationId,
+            normalizedPhone,
+            body,
+            existingContactId: contactId,
+          })
+          if (created) {
+            await onDealCreated({
+              dealId: created.dealId,
+              boardId: created.boardId,
+              organizationId: created.organizationId,
+            })
+          }
         }
 
         // Super Agente em background.

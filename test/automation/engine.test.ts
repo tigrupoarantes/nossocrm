@@ -35,9 +35,14 @@ const supabaseMock = {
         eq: vi.fn().mockReturnThis(),
         lte: vi.fn().mockReturnThis(),
         limit: vi.fn(async () => ({ data: pendingSchedules, error: null })),
+        // CAS reforcado: update().eq().eq().select() retorna o array
+        // de rows que foram efetivamente atualizadas (compare-and-swap).
         update: vi.fn(() => ({
           eq: vi.fn(() => ({
-            eq: vi.fn(async () => ({ error: null })),
+            eq: vi.fn(() => ({
+              select: vi.fn(async () => ({ data: [{ id: 'sched-claimed' }], error: null })),
+            })),
+            select: vi.fn(async () => ({ data: [{ id: 'sched-failed' }], error: null })),
           })),
         })),
       }
@@ -84,6 +89,8 @@ const supabaseMock = {
 
 vi.mock('@/lib/supabase/server', () => ({
   createClient: async () => supabaseMock,
+  // Engine usa createStaticAdminClient (sem cookies) para rodar via cron.
+  createStaticAdminClient: () => supabaseMock,
 }))
 
 // ---------------------------------------------------------------------------

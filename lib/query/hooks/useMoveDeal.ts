@@ -1,23 +1,25 @@
 /**
  * Unified hook for moving deals between stages
- * 
+ *
  * This is the SINGLE SOURCE OF TRUTH for deal movement logic.
  * Use this hook everywhere instead of calling updateDeal/updateDealStatus directly.
- * 
+ *
  * Features:
  * - Detects won/lost stages via linkedLifecycleStage
  * - Creates activity history entries
  * - Updates contact lifecycle stage (LinkedStage automation)
  * - Creates deal in next board (NextBoard automation)
  * - Optimistic updates for instant UI feedback
+ * - Refetch+toast quando automacao move o card para outro stage
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { queryKeys, DEALS_VIEW_KEY } from '../queryKeys';
 import { dealsService } from '@/lib/supabase';
-import { boardsService } from '@/lib/supabase/boards'; // Added
+import { boardsService } from '@/lib/supabase/boards';
 import { activitiesService } from '@/lib/supabase/activities';
 import { contactsService } from '@/lib/supabase/contacts';
 import { onStageEntered } from '@/lib/automation/triggers';
+import { useOptionalToast } from '@/context/ToastContext';
 import type { Deal, DealView, Board, Activity } from '@/types';
 
 interface MoveDealParams {
@@ -42,14 +44,18 @@ interface MoveDealResult {
 // Context type for optimistic updates
 interface MoveDealContext {
   previousDeals: DealView[] | undefined;
+  /** Stage destino escolhido pelo usuario — usado pra detectar move_stage automatico */
+  intendedStageId: string;
+  /** Board atual — usado pra resolver nome do stage final no toast */
+  board: Board;
 }
 
 /**
  * Hook React `useMoveDeal` que encapsula uma lógica reutilizável.
- * @returns {UseMutationResult<MoveDealResult, Error, MoveDealParams, MoveDealContext>} Retorna um valor do tipo `UseMutationResult<MoveDealResult, Error, MoveDealParams, MoveDealContext>`.
  */
 export const useMoveDeal = () => {
   const queryClient = useQueryClient();
+  const { showToast } = useOptionalToast();
 
   return useMutation<MoveDealResult, Error, MoveDealParams, MoveDealContext>({
     mutationFn: async ({ dealId, targetStageId, lossReason, deal, board, lifecycleStages, explicitWin, explicitLost }) => {
@@ -106,37 +112,10 @@ export const useMoveDeal = () => {
       };
 
       // 1. Update the deal
-      // #region agent log
-      if (process.env.NODE_ENV !== 'production') {
-        const logData = {
-          dealId: dealId.slice(0, 8),
-          targetStageId: targetStageId.slice(0, 8),
-          updates: { status: targetStageId.slice(0, 8), isWon, isLost },
-        };
-        console.log(`[useMoveDeal] 📤 Sending update to server`, logData);
-        fetch('http://127.0.0.1:7242/ingest/d70f541c-09d7-4128-9745-93f15f184017',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useMoveDeal.ts:108',message:'Sending update to server',data:logData,timestamp:Date.now(),sessionId:'debug-session',runId:'move-deal',hypothesisId:'H'})}).catch(()=>{});
-      }
-      // #endregion
-      
       const { error: dealError } = await dealsService.update(dealId, updates);
       if (dealError) {
-        // #region agent log
-        if (process.env.NODE_ENV !== 'production') {
-          const logData = { dealId: dealId.slice(0, 8), error: String(dealError) };
-          console.log(`[useMoveDeal] ❌ Server update failed`, logData);
-          fetch('http://127.0.0.1:7242/ingest/d70f541c-09d7-4128-9745-93f15f184017',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useMoveDeal.ts:110',message:'Server update failed',data:logData,timestamp:Date.now(),sessionId:'debug-session',runId:'move-deal',hypothesisId:'I'})}).catch(()=>{});
-        }
-        // #endregion
         throw dealError;
       }
-      
-      // #region agent log
-      if (process.env.NODE_ENV !== 'production') {
-        const logData = { dealId: dealId.slice(0, 8), targetStageId: targetStageId.slice(0, 8) };
-        console.log(`[useMoveDeal] ✅ Server update confirmed`, logData);
-        fetch('http://127.0.0.1:7242/ingest/d70f541c-09d7-4128-9745-93f15f184017',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useMoveDeal.ts:112',message:'Server update confirmed',data:logData,timestamp:Date.now(),sessionId:'debug-session',runId:'move-deal',hypothesisId:'J'})}).catch(()=>{});
-      }
-      // #endregion
 
       // 2. Create activity "Moveu para X" (fire and forget - don't block UI)
       const stageLabel = targetStage?.label || targetStageId;
@@ -174,12 +153,16 @@ export const useMoveDeal = () => {
       }
 
       // 4. Automation Engine: trigger stage_entered (fire-and-forget)
+      // O trigger ja dispara o endpoint run-now internamente — automacao
+      // roda em < 2s sem esperar o cron de 15min.
       if (deal.boardId) {
         onStageEntered({
           dealId,
           boardId: deal.boardId,
           stageId: targetStageId,
-          organizationId: (deal as any).organizationId ?? (deal as any).organization_id ?? '',
+          organizationId: (deal as { organizationId?: string; organization_id?: string }).organizationId
+            ?? (deal as { organizationId?: string; organization_id?: string }).organization_id
+            ?? '',
         }).catch(console.error);
       }
 
@@ -246,18 +229,6 @@ export const useMoveDeal = () => {
 
     // Optimistic update: update UI instantly before server responds
     onMutate: async ({ dealId, targetStageId, deal, explicitWin, explicitLost, board }) => {
-      // #region agent log
-      if (process.env.NODE_ENV !== 'production') {
-        const logData = {
-          dealId: dealId.slice(0, 8),
-          targetStageId: targetStageId.slice(0, 8),
-          currentStatus: deal.status?.slice(0, 8) || 'null',
-        };
-        console.log(`[useMoveDeal] 🚀 Starting optimistic update`, logData);
-        fetch('http://127.0.0.1:7242/ingest/d70f541c-09d7-4128-9745-93f15f184017',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useMoveDeal.ts:210',message:'Starting optimistic update',data:logData,timestamp:Date.now(),sessionId:'debug-session',runId:'move-deal',hypothesisId:'F'})}).catch(()=>{});
-      }
-      // #endregion
-      
       // Cancel any outgoing refetches
       await queryClient.cancelQueries({ queryKey: queryKeys.deals.all });
 
@@ -280,23 +251,9 @@ export const useMoveDeal = () => {
       // Optimistically update APENAS DEALS_VIEW_KEY (única fonte de verdade)
       queryClient.setQueryData<DealView[]>(DEALS_VIEW_KEY, (old) => {
         if (!old) return old;
-        
-        const dealInCache = old.find(d => d.id === dealId);
-        // #region agent log
-        if (process.env.NODE_ENV !== 'production') {
-          const logData = {
-            cacheSize: old.length,
-            dealFound: !!dealInCache,
-            currentStatus: dealInCache?.status?.slice(0, 8) || 'null',
-          };
-          console.log(`[useMoveDeal] 📊 Processing DEALS_VIEW_KEY cache`, logData);
-          fetch('http://127.0.0.1:7242/ingest/d70f541c-09d7-4128-9745-93f15f184017',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useMoveDeal.ts:280',message:'Processing cache for optimistic update',data:logData,timestamp:Date.now(),sessionId:'debug-session',runId:'move-deal',hypothesisId:'OPT'})}).catch(()=>{});
-        }
-        // #endregion
-        
         return old.map(d => {
           if (d.id === dealId) {
-            const newDeal = {
+            return {
               ...d,
               status: targetStageId,
               lastStageChangeDate: new Date().toISOString(),
@@ -304,19 +261,6 @@ export const useMoveDeal = () => {
               isLost: isLost ?? d.isLost,
               updatedAt: new Date().toISOString(),
             };
-            // #region agent log
-            if (process.env.NODE_ENV !== 'production') {
-              const logData = {
-                dealId: dealId.slice(0, 8),
-                oldStatus: d.status?.slice(0, 8) || 'null',
-                newStatus: targetStageId.slice(0, 8),
-                updatedAt: newDeal.updatedAt,
-              };
-              console.log(`[useMoveDeal] ✅ Optimistic update applied`, logData);
-              fetch('http://127.0.0.1:7242/ingest/d70f541c-09d7-4128-9745-93f15f184017',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useMoveDeal.ts:235',message:'Optimistic update applied',data:logData,timestamp:Date.now(),sessionId:'debug-session',runId:'move-deal',hypothesisId:'G'})}).catch(()=>{});
-            }
-            // #endregion
-            return newDeal;
           }
           return d;
         });
@@ -335,7 +279,7 @@ export const useMoveDeal = () => {
         };
       });
 
-      return { previousDeals };
+      return { previousDeals, intendedStageId: targetStageId, board };
     },
 
     // Rollback on error
@@ -345,33 +289,34 @@ export const useMoveDeal = () => {
       }
     },
 
-    // Only refetch deals on success (not contacts, not activities)
-    // NOTE: We DON'T invalidate here to avoid race condition with Realtime.
-    // The Realtime UPDATE event will handle synchronization.
-    // Invalidating here causes the deal to "jump back" because:
-    // 1. Optimistic update moves deal visually
-    // 2. Server confirms update
-    // 3. onSettled invalidates → refetch (may get stale data if timing is off)
-    // 4. Realtime UPDATE arrives → invalidates again → refetch (may overwrite with old data)
-    // By skipping invalidation here, we let Realtime handle sync naturally.
-    onSettled: () => {
-      // #region agent log
-      if (process.env.NODE_ENV !== 'production') {
-        console.log(`[useMoveDeal] ⏸️ onSettled called (skipping invalidation, waiting for Realtime)`);
-        fetch('http://127.0.0.1:7242/ingest/d70f541c-09d7-4128-9745-93f15f184017',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useMoveDeal.ts:276',message:'onSettled called',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'move-deal',hypothesisId:'K'})}).catch(()=>{});
-      }
-      // #endregion
-      // Let Realtime handle synchronization - it will invalidate when the UPDATE event arrives
+    // Apos sucesso: agenda refetch em 3s pra capturar moves automaticos
+    // feitos pela regra (action_type=move_stage). Se o stage final no banco
+    // diferir do que o usuario soltou, mostra toast explicando a automacao.
+    onSuccess: (_data, _variables, context) => {
+      if (!context) return;
+      const { intendedStageId, board } = context;
+
+      setTimeout(async () => {
+        await queryClient.invalidateQueries({ queryKey: DEALS_VIEW_KEY });
+        // Le do cache pos-refetch
+        const fresh = queryClient.getQueryData<DealView[]>(DEALS_VIEW_KEY);
+        const updated = fresh?.find(d => d.id === _data.dealId);
+        if (!updated) return;
+        if (updated.status && updated.status !== intendedStageId) {
+          const finalStage = board.stages.find(s => s.id === updated.status);
+          const finalLabel = finalStage?.label ?? 'outra etapa';
+          showToast(`Automação aplicada — card movido para "${finalLabel}"`, 'info');
+        }
+      }, 3000);
     },
+
+    // NOTE: We DON'T invalidate in onSettled to avoid race condition with Realtime.
+    // The setTimeout above (3s) handles the automation-induced move case.
   });
 };
 
 /**
  * Hook React `useMoveDealSimple` que encapsula uma lógica reutilizável.
- *
- * @param {Board | null} board - Parâmetro `board`.
- * @param {{ id: string; name: string; }[] | undefined} lifecycleStages - Parâmetro `lifecycleStages`.
- * @returns {{ moveDeal: (deal: Deal | DealView, targetStageId: string, lossReason?: string | undefined, explicitWin?: boolean | undefined, explicitLost?: boolean | undefined) => Promise<...>; isMoving: boolean; error: Error | null; }} Retorna um valor do tipo `{ moveDeal: (deal: Deal | DealView, targetStageId: string, lossReason?: string | undefined, explicitWin?: boolean | undefined, explicitLost?: boolean | undefined) => Promise<...>; isMoving: boolean; error: Error | null; }`.
  */
 export const useMoveDealSimple = (
   board: Board | null,

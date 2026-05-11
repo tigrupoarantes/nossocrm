@@ -17,6 +17,7 @@ import { FacebookCAPISettings } from './components/FacebookCAPISettings';
 
 import { UsersPage } from './UsersPage';
 import { CommunicationSection } from './components/CommunicationSection';
+import { WhatsAppCaptureSection } from './components/WhatsAppCaptureSection';
 import { useAuth } from '@/context/AuthContext';
 import { Settings as SettingsIcon, Users, Database, Sparkles, Plug, Package, Building2, MessageSquare, Users2, Bell, Cpu, Zap, Send } from 'lucide-react';
 
@@ -277,6 +278,15 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ tab: initialTab }) => {
                 Configure e-mail (SMTP), WhatsApp (Twilio), SERASA e base FLAG/SAP para as automações do Funil de Qualificação.
               </p>
               <CommunicationSection />
+            </div>
+            <div className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-6 mt-4">
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-1 flex items-center gap-2">
+                <MessageSquare className="h-5 w-5" /> Captura automática (WhatsApp inbound)
+              </h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
+                Define o board e coluna onde leads que chegam por WhatsApp (número desconhecido) viram deals automaticamente.
+              </p>
+              <WhatsAppCaptureSection />
             </div>
           </div>
         );

@@ -30,7 +30,8 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { createStaticAdminClient } from '@/lib/supabase/server';
-import { onResponseReceived } from '@/lib/automation/triggers';
+import { onResponseReceived, onDealCreated } from '@/lib/automation/triggers';
+import { ensureContactAndDealFromInbound } from '@/lib/automation/inboundCapture';
 import { processWithSuperAgent } from '@/lib/ai/super-agent/engine';
 import { resolveWahaConfigBySession } from '@/lib/communication/meta-config-resolver';
 import { rehostInboundMedia, categorizeMime } from '@/lib/communication/media-rehost';
@@ -676,9 +677,27 @@ export async function POST(request: Request) {
     session,
   });
 
-  // Automação só dispara se houver deal vinculado
-  if (dealMatch) {
-    await onResponseReceived(dealMatch);
+  // Captura automatica: se nao havia deal, tenta criar um no board configurado
+  // (organization_settings.whatsapp_capture_*). Se a org nao configurou, retorna
+  // null e mantemos o comportamento antigo (sem disparar automacao).
+  let dealCtx = dealMatch;
+  if (!dealCtx) {
+    const created = await ensureContactAndDealFromInbound(supabase, {
+      organizationId,
+      normalizedPhone,
+      body,
+      existingContactId: contactId,
+    });
+    if (created) {
+      dealCtx = created;
+      await onDealCreated({
+        dealId: created.dealId,
+        boardId: created.boardId,
+        organizationId: created.organizationId,
+      });
+    }
+  } else {
+    await onResponseReceived(dealCtx);
   }
 
   // Super Agente em background

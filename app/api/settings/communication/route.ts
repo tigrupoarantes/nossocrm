@@ -52,6 +52,13 @@ const MetaWhatsAppSchema = z.object({
   appSecret: z.string().optional(),
 }).nullable();
 
+// Captura automatica de leads via WhatsApp inbound: board+stage onde o
+// webhook cria deal quando chega mensagem de numero desconhecido.
+const WhatsAppCaptureSchema = z.object({
+  boardId: z.string().uuid().nullable(),
+  stageId: z.string().uuid().nullable(),
+}).nullable();
+
 const PutSchema = z.object({
   smtp: SmtpSchema.optional(),
   twilio: TwilioSchema.optional(),
@@ -59,6 +66,7 @@ const PutSchema = z.object({
   customerBase: CustomerBaseSchema.optional(),
   waha: WahaSchema.optional(),
   metaWhatsApp: MetaWhatsAppSchema.optional(),
+  whatsappCapture: WhatsAppCaptureSchema.optional(),
 });
 
 // =============================================================================
@@ -82,7 +90,7 @@ export async function GET() {
 
   const { data: settings } = await supabase
     .from('organization_settings')
-    .select('smtp_config, twilio_config, serasa_config, customer_base_config, waha_config, meta_whatsapp_config')
+    .select('smtp_config, twilio_config, serasa_config, customer_base_config, waha_config, meta_whatsapp_config, whatsapp_capture_board_id, whatsapp_capture_stage_id')
     .eq('organization_id', profile.organization_id)
     .single();
 
@@ -92,6 +100,8 @@ export async function GET() {
   const customerBase = (settings as any)?.customer_base_config ?? null;
   const waha = (settings as any)?.waha_config ?? null;
   const metaWhatsApp = (settings as any)?.meta_whatsapp_config ?? null;
+  const captureBoardId = (settings as any)?.whatsapp_capture_board_id ?? null;
+  const captureStageId = (settings as any)?.whatsapp_capture_stage_id ?? null;
 
   // Mascarar campos sensíveis antes de retornar
   return NextResponse.json({
@@ -101,6 +111,9 @@ export async function GET() {
     customerBase: customerBase ? { ...customerBase, apiKey: customerBase.apiKey ? '••••••••' : '' } : null,
     waha: waha ? { ...waha, apiKey: waha.apiKey ? '••••••••' : '' } : null,
     metaWhatsApp: metaWhatsApp ? { ...metaWhatsApp, accessToken: metaWhatsApp.accessToken ? '••••••••' : '', appSecret: metaWhatsApp.appSecret ? '••••••••' : '' } : null,
+    whatsappCapture: (captureBoardId || captureStageId)
+      ? { boardId: captureBoardId, stageId: captureStageId }
+      : null,
     configured: {
       smtp: !!(smtp?.host),
       twilio: !!(twilio?.accountSid),
@@ -108,6 +121,7 @@ export async function GET() {
       customerBase: !!(customerBase?.baseUrl),
       waha: !!(waha?.baseUrl),
       metaWhatsApp: !!(metaWhatsApp?.phoneNumberId),
+      whatsappCapture: !!(captureBoardId && captureStageId),
     },
   });
 }
@@ -204,6 +218,11 @@ export async function PUT(request: Request) {
       parsed.data.metaWhatsApp!.appSecret = (existingSettings as any)?.meta_whatsapp_config?.appSecret ?? '';
     }
     updates.meta_whatsapp_config = parsed.data.metaWhatsApp;
+  }
+
+  if (parsed.data.whatsappCapture !== undefined) {
+    updates.whatsapp_capture_board_id = parsed.data.whatsappCapture?.boardId ?? null;
+    updates.whatsapp_capture_stage_id = parsed.data.whatsappCapture?.stageId ?? null;
   }
 
   const { error } = await supabase
